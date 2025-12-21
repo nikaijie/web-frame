@@ -6,7 +6,7 @@
 
 #include "spinlock.h"
 #include "runtime/goroutine.h"
-#include "runtime/IOContext.h"
+#include "runtime/context/iocontext.h"
 
 namespace runtime {
 
@@ -29,14 +29,16 @@ namespace runtime {
 
         void poll_loop();
 
-        // 辅助方法：获取缓冲区数据
-        std::string fetch_read_buf(int fd);
+        void watch_read_web(int fd, Goroutine::Ptr g);
+
+        void watch_write_web(int fd, Goroutine::Ptr g);
+
 
     private:
         int kq_fd_;
         // 必须使用 mutex 保护 contexts_，因为 watch 可能由不同 Worker 线程调用
         std::mutex mtx_;
-        std::map<int, std::unique_ptr<IOContext>> contexts_;
+        std::map<int, std::unique_ptr<IOContextBase>> contexts_;
         runtime::Spinlock lock_;
     };
 

@@ -2,11 +2,11 @@
 #include "runtime/scheduler.h"
 #include <unistd.h>
 #include <fcntl.h>
-#include <iostream>
+#include "runtime/context/db_context.h"
+#include "runtime/context/web_context.h"
 
 namespace runtime {
-
-    Netpoller& Netpoller::get() {
+    Netpoller &Netpoller::get() {
         static Netpoller instance;
         return instance;
     }
@@ -19,6 +19,62 @@ namespace runtime {
         if (kq_fd_ != -1) close(kq_fd_);
     }
 
+
+    void Netpoller::poll_loop() {
+        struct kevent events[1024];
+        while (true) {
+            int n = kevent(kq_fd_, nullptr, 0, events, 1024, nullptr);
+            if (n <= 0) continue;
+            for (int i = 0; i < n; ++i) {
+                auto *ctx = static_cast<runtime::IOContextBase *>(events[i].udata);
+                if (!ctx) continue;
+                runtime::Goroutine::Ptr g_to_wake;
+                {
+                    std::lock_guard<std::mutex> lock(mtx_);
+                    if (ctx->waiting_g) {
+                        g_to_wake = std::move(ctx->waiting_g);
+                        ctx->waiting_g = nullptr;
+                    }
+                }
+                if (g_to_wake) {
+                    Scheduler::get().push_ready(std::move(g_to_wake));
+                }
+            }
+        }
+    }
+
+
+    void Netpoller::watch_read_web(int fd, Goroutine::Ptr g) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (contexts_.find(fd) == contexts_.end()) {
+                contexts_[fd] = std::make_unique<gee::WebContext>(fd);
+            }
+            contexts_[fd]->type = IOType::WEB; // 核心：打上 WEB 标签
+            contexts_[fd]->waiting_g = std::move(g);
+        }
+
+        struct kevent ev;
+        EV_SET(&ev, fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, contexts_[fd].get());
+        kevent(kq_fd_, &ev, 1, nullptr, 0, nullptr);
+    }
+
+    void Netpoller::watch_write_web(int fd, Goroutine::Ptr g) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (contexts_.find(fd) == contexts_.end()) {
+                contexts_[fd] = std::make_unique<gee::WebContext>(fd);
+            }
+            contexts_[fd]->type = IOType::WEB;
+            contexts_[fd]->waiting_g = std::move(g);
+        }
+
+        struct kevent ev;
+        EV_SET(&ev, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, contexts_[fd].get());
+        kevent(kq_fd_, &ev, 1, nullptr, 0, nullptr);
+    }
+
+    //数据库io时向
     void Netpoller::watch(int fd, IOEvent event, Goroutine::Ptr g) {
         // 1. 设置非阻塞
         int flags = fcntl(fd, F_GETFL, 0);
@@ -29,16 +85,14 @@ namespace runtime {
         {
             lock_.lock();
             if (contexts_.find(fd) == contexts_.end()) {
-                contexts_[fd] = std::make_unique<IOContext>(fd);
+                contexts_[fd] = std::make_unique<DBContext>(fd);
             }
             contexts_[fd]->waiting_g = std::move(g);
             lock_.unlock();
         }
 
         // 3. 注册 kqueue 事件
-
         struct kevent ev;
-        // 使用 EV_ONESHOT：触发一次后自动删除，非常适合异步驱动的状态机切换
         EV_SET(&ev, fd, static_cast<int16_t>(event), EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, contexts_[fd].get());
 
         if (kevent(kq_fd_, &ev, 1, nullptr, 0, nullptr) == -1) {
@@ -49,50 +103,4 @@ namespace runtime {
     void Netpoller::watch_read(int fd, Goroutine::Ptr g) {
         watch(fd, IOEvent::Read, std::move(g));
     }
-
-    void Netpoller::poll_loop() {
-        struct kevent events[1024];
-        while (true) {
-
-            int n = kevent(kq_fd_, nullptr, 0, events, 1024, nullptr);
-            if (n <= 0) continue;
-            for (int i = 0; i < n; ++i) {
-                IOContext* ctx = static_cast<IOContext*>(events[i].udata);
-                if (!ctx) continue;
-
-                // 处理读事件
-                // if (events[i].filter == EVFILT_READ) {
-                //     std::cout<<"poll_loop()_read"<<std::endl;
-                //     char tmp[8192];
-                //     while (true) {
-                //         ssize_t bytes = read(ctx->fd, tmp, sizeof(tmp));
-                //         if (bytes > 0) {
-                //             ctx->read_buf.append(tmp, bytes);
-                //         } else {
-                //             break;
-                //         }
-                //     }
-                // }
-
-                // 处理写事件 (或者读事件读完后)
-                // 只要事件触发，说明 fd 就绪，唤醒协程
-                std::lock_guard<std::mutex> lock(mtx_);
-                if (ctx->waiting_g) {
-                    Scheduler::get().push_ready(std::move(ctx->waiting_g));
-                    ctx->waiting_g = nullptr;
-                }
-            }
-        }
-    }
-
-    std::string Netpoller::fetch_read_buf(int fd) {
-        std::lock_guard<std::mutex> lock(mtx_);
-        if (contexts_.count(fd)) {
-            std::string data = std::move(contexts_[fd]->read_buf);
-            contexts_[fd]->read_buf.clear();
-            return data;
-        }
-        return "";
-    }
-
-} // namespace runtime
+}
