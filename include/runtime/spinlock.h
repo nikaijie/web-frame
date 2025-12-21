@@ -7,20 +7,15 @@ namespace runtime {
         Spinlock() : flag_(ATOMIC_FLAG_INIT) {
         }
 
-        /**
-         * @brief 尝试加锁。
-         * @return true 成功获取锁；false 20次自旋后仍未获取。
-         */
-        inline bool lock() {
-            for (int i = 0; i < 20; ++i) {
-                if (!flag_.test_and_set(std::memory_order_acquire)) {
-                    return true;
-                }
+
+        inline void lock() {
+            while (flag_.test_and_set(std::memory_order_acquire)) {
 #if defined(__i386__) || defined(__x86_64__)
                 __builtin_ia32_pause();
+#elif defined(__arm__) || defined(__aarch64__)
+                asm volatile("yield");
 #endif
             }
-            return false; // 20次没拿到，不阻塞线程，直接返回
         }
 
         inline void unlock() {

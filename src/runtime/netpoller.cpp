@@ -26,16 +26,17 @@ namespace runtime {
             fcntl(fd, F_SETFL, flags | O_NONBLOCK);
         }
 
-        // 2. 绑定上下文
         {
-            std::lock_guard<std::mutex> lock(mtx_);
+            lock_.lock();
             if (contexts_.find(fd) == contexts_.end()) {
                 contexts_[fd] = std::make_unique<IOContext>(fd);
             }
             contexts_[fd]->waiting_g = std::move(g);
+            lock_.unlock();
         }
 
         // 3. 注册 kqueue 事件
+
         struct kevent ev;
         // 使用 EV_ONESHOT：触发一次后自动删除，非常适合异步驱动的状态机切换
         EV_SET(&ev, fd, static_cast<int16_t>(event), EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, contexts_[fd].get());

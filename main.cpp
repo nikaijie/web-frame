@@ -10,7 +10,7 @@
 #include "runtime/netpoller.h"
 
 // --- 内存监控工具函数 ---
-void print_mem_usage(const std::string& tag) {
+void print_mem_usage(const std::string &tag) {
     struct rusage usage;
     getrusage(RUSAGE_SELF, &usage);
 
@@ -81,9 +81,8 @@ int main() {
                     .model();
 
             // 采样打印，避免控制台 IO 成为瓶颈
-            if (i % 500 == 0) {
-                std::cout << "[协程 " << i << "] 查询成功，返回行数: " << results.size() << std::endl;
-            }
+            std::cout << "[协程 " << i << "] 查询成功，返回行数: " << results.size() << std::endl;
+
 
             finished_count++;
         });

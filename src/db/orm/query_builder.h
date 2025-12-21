@@ -76,11 +76,8 @@ namespace db {
          * @brief 核心逻辑：如果池中无连接，挂起当前协程，直到获得连接
          */
         MySQLDriver *get_driver_safely() {
-            MySQLDriver *drv = nullptr;
-            while (!(drv = MySQLPool::get().acquire())) {
-                // 连接池空了，让出 CPU 给其他协程，等下一轮调度再尝试
-                runtime::Goroutine::yield();
-            }
+            MySQLDriver *drv = MySQLPool::get().acquire();
+            assert(drv != nullptr);
             return drv;
         }
 

@@ -3,6 +3,8 @@
 #include <map>
 #include <memory>
 #include <string>
+
+#include "spinlock.h"
 #include "runtime/goroutine.h"
 #include "runtime/IOContext.h"
 
@@ -35,6 +37,7 @@ namespace runtime {
         // 必须使用 mutex 保护 contexts_，因为 watch 可能由不同 Worker 线程调用
         std::mutex mtx_;
         std::map<int, std::unique_ptr<IOContext>> contexts_;
+        runtime::Spinlock lock_;
     };
 
 } // namespace runtime

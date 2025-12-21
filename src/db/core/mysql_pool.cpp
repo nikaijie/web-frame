@@ -22,24 +22,25 @@ namespace db {
     }
 
     MySQLDriver *MySQLPool::acquire() {
-        if (!lock_.lock()) return nullptr;
+        lock_.lock(); // 绝对阻塞，直到拿到锁，不会返回 nullptr
+
         if (pool_.empty()) {
             lock_.unlock();
-            return nullptr;
+            return nullptr; // 只有在池子真的空了时才返回 null
         }
+
         MySQLDriver *drv = pool_.front();
         pool_.pop();
+
         lock_.unlock();
         return drv;
     }
 
     void MySQLPool::release(MySQLDriver *driver) {
         if (!driver) return;
-        while (!lock_.lock()) {
-            runtime::Goroutine::yield();
-        }
-        pool_.push(driver);
 
+        lock_.lock(); // 绝对阻塞，拿到锁再进去
+        pool_.push(driver);
         lock_.unlock();
     }
 
