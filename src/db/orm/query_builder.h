@@ -58,7 +58,8 @@ namespace db {
          * @brief 插入模型数据
          */
         bool insert(const T &obj) {
-            RowData data = obj.to_row();
+            // 1. 注意这里：获取的是 FieldMap (Map类型)，而不是 RawRow (指针类型)
+            FieldMap data = obj.to_row();
             std::string sql = build_insert_sql(data);
 
             MySQLDriver *drv = get_driver_safely();
@@ -93,7 +94,9 @@ namespace db {
             return ss.str();
         }
 
-        std::string build_insert_sql(const RowData &data) {
+        std::string build_insert_sql(const FieldMap &data) {
+            if (data.empty()) return "";
+
             std::stringstream cols, vals;
             for (auto it = data.begin(); it != data.end(); ++it) {
                 cols << it->first << (std::next(it) == data.end() ? "" : ", ");

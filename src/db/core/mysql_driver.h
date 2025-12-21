@@ -5,7 +5,16 @@
 #include <map>
 
 namespace db {
-    using RowData = std::map<std::string, std::string>;
+    using RawRow = char**;
+
+    struct ResultSet {
+        MYSQL_RES* res;
+        uint64_t row_count;
+        int num_fields;
+    };
+
+    // 插入或更新时使用的键值映射
+    using FieldMap = std::map<std::string, std::string>;
 
     class MySQLDriver {
     public:
@@ -27,17 +36,19 @@ namespace db {
         /**
          * @brief 异步查询：由协程调用，内部会 yield
          */
-        std::vector<RowData> execute_query(const std::string &sql);
+        std::vector<RawRow> execute_query(const std::string &sql);
 
         /**
          * @brief 异步更新：由协程调用
          */
         int execute_update(const std::string &sql);
 
+        void free_result();
+
     private:
         void wait_io(int status);
 
-        std::vector<RowData> parse_result(MYSQL_RES *res);
+        std::vector<RawRow> parse_result(MYSQL_RES *res);
 
         MYSQL *mysql_;
     };

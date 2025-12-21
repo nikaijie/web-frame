@@ -48,7 +48,7 @@ namespace db {
         }
     }
 
-    std::vector<RowData> MySQLDriver::execute_query(const std::string &sql) {
+    std::vector<RawRow> MySQLDriver::execute_query(const std::string &sql) {
         int status, err;
 
         // 所有的 query 操作依然使用异步版本，这样能保证多协程并发时不阻塞 Worker 线程
@@ -78,22 +78,20 @@ namespace db {
         return (err == 0) ? (int) mysql_affected_rows(mysql_) : -1;
     }
 
-    std::vector<RowData> MySQLDriver::parse_result(MYSQL_RES *res) {
-        std::vector<RowData> results;
+    std::vector<RawRow> MySQLDriver::parse_result(MYSQL_RES* res) {
+        std::vector<RawRow> results;
         if (!res) return results;
 
-        int num_fields = mysql_num_fields(res);
-        MYSQL_FIELD *fields = mysql_fetch_fields(res);
-        MYSQL_ROW row;
+        uint64_t num_rows = mysql_num_rows(res);
+        results.reserve(num_rows); // 一次性分配 vector 空间
 
+        MYSQL_ROW row;
         while ((row = mysql_fetch_row(res))) {
-            RowData row_map;
-            for (int i = 0; i < num_fields; i++) {
-                row_map[fields[i].name] = row[i] ? row[i] : "NULL";
-            }
-            results.push_back(row_map);
+            // 关键：只存指针，不存数据。 row 是由 mysql 库管理的内存
+            results.push_back(row);
         }
-        mysql_free_result(res);
+        // 注意：这里不能执行 mysql_free_result，因为 results 里的指针指向它
+        // 我们需要把 free 延迟到 model 映射完之后
         return results;
     }
 } // namespace db
