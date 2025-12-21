@@ -4,6 +4,8 @@
 #include <mutex>
 #include <string>
 
+#include "runtime/spinlock.h"
+
 namespace db {
 
     class MySQLPool {
@@ -46,6 +48,7 @@ namespace db {
         std::mutex mtx_;
         // 用于记录总连接数
         int capacity_ = 0;
+        runtime::Spinlock lock_;
     };
 
 } // namespace db

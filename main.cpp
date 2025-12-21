@@ -76,7 +76,6 @@ int main() {
     // 3. 批量启动协程
     for (int i = 0; i < total_tasks; ++i) {
         runtime::go([&finished_count, i]() {
-            // 执行查询：SELECT * FROM employees WHERE salary > '5000';
             auto results = db::table<Employee>("employees")
                     .where("salary", ">", "5000")
                     .model();

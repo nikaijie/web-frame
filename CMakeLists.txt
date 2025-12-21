@@ -23,7 +23,8 @@ add_executable(webFrame ${SOURCES}
         src/db/core/mysql_pool.h
         src/db/orm/model.h
         src/db/orm/query_builder.h
-        src/db/db.h)
+        src/db/db.h
+        include/runtime/spinlock.h)
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE

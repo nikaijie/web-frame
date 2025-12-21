@@ -1,13 +1,14 @@
 #include "mysql_pool.h"
 #include <iostream>
 
-namespace db {
+#include "runtime/goroutine.h"
 
-    void MySQLPool::init(const std::string& host, const std::string& user,
-                        const std::string& pass, const std::string& dbname, int size) {
+namespace db {
+    void MySQLPool::init(const std::string &host, const std::string &user,
+                         const std::string &pass, const std::string &dbname, int size) {
         std::lock_guard<std::mutex> lock(mtx_);
         for (int i = 0; i < size; ++i) {
-            auto* driver = new MySQLDriver();
+            auto *driver = new MySQLDriver();
             // 调用我们之前写的同步连接函数
             if (driver->connect_sync(host, user, pass, dbname)) {
                 pool_.push(driver);
@@ -16,24 +17,30 @@ namespace db {
                 delete driver;
             }
         }
-        capacity_ = (int)pool_.size();
+        capacity_ = (int) pool_.size();
         std::cout << "MySQLPool: Initialized with " << capacity_ << " connections." << std::endl;
     }
 
-    MySQLDriver* MySQLPool::acquire() {
-        std::lock_guard<std::mutex> lock(mtx_);
+    MySQLDriver *MySQLPool::acquire() {
+        if (!lock_.lock()) return nullptr;
         if (pool_.empty()) {
+            lock_.unlock();
             return nullptr;
         }
-        MySQLDriver* drv = pool_.front();
+        MySQLDriver *drv = pool_.front();
         pool_.pop();
+        lock_.unlock();
         return drv;
     }
 
-    void MySQLPool::release(MySQLDriver* driver) {
+    void MySQLPool::release(MySQLDriver *driver) {
         if (!driver) return;
-        std::lock_guard<std::mutex> lock(mtx_);
+        while (!lock_.lock()) {
+            runtime::Goroutine::yield();
+        }
         pool_.push(driver);
+
+        lock_.unlock();
     }
 
     MySQLPool::~MySQLPool() {
@@ -42,5 +49,4 @@ namespace db {
             pool_.pop();
         }
     }
-
 } // namespace db
