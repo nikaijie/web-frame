@@ -1,29 +1,37 @@
 cmake_minimum_required(VERSION 3.20)
 project(webFrame)
 
+# 消除 Boost 寻找策略的警告
+cmake_policy(SET CMP0167 OLD)
+
 set(CMAKE_CXX_STANDARD 17)
 
-# 1. 寻找 Boost 库 (必须包含 context 组件)
+# 1. 寻找 Boost 库
 find_package(Boost REQUIRED COMPONENTS context)
 
-# 2. 定义可执行文件
-# 注意：头文件 (.h) 其实不需要放在 add_executable 里，
-# 但放进去可以让 CLion 等 IDE 的索引更智能。
-add_executable(webFrame
-        main.cpp
-        src/web/gee.cpp
-        src/web/request.cpp
-        src/web/response.cpp
-        src/runtime/goroutine.cpp
-        include/runtime/goroutine.h
-        include/runtime/scheduler.h
-        src/runtime/scheduler.cpp)
+# 2. 指定 MariaDB 路径 (请确保已执行 brew install mariadb-connector-c)
+set(MARIADB_PATH "/opt/homebrew/opt/mariadb-connector-c")
 
-# 3. 指定包含路径
-# PRIVATE 表示这些头文件只用于编译此 target
+# 3. 定义源文件
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+list(APPEND SOURCES "main.cpp")
+
+add_executable(webFrame ${SOURCES}
+        src/db/MySQLPool.cpp)
+
+# 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE
         include
-        ${Boost_INCLUDE_DIRS})
+        ${Boost_INCLUDE_DIRS}
+        ${MARIADB_PATH}/include
+        ${MARIADB_PATH}/include/mariadb # 关键：MariaDB 的 mysql.h 通常在这里
+)
 
-# 4. 关键：链接 Boost 库 (这是解决 Symbol 报错的核心)
-target_link_libraries(webFrame PRIVATE Boost::context)
+# 5. 链接库 (直接链接 dylib 文件最稳妥，避免路径歧义)
+target_link_libraries(webFrame PRIVATE
+        Boost::context
+        "${MARIADB_PATH}/lib/mariadb/libmariadb.dylib"
+)
+
+# 6. 添加异步编译宏
+add_definitions(-DMARIADB_NONBLOCKING=1)

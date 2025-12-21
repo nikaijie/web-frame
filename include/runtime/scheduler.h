@@ -19,6 +19,8 @@ namespace runtime {
         // 将协程放入就绪队列
         void push_ready(Goroutine::Ptr g);
 
+        ~Scheduler();
+
     private:
         Scheduler() = default;
         void worker_loop(); // Worker 线程的核心循环

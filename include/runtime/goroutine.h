@@ -5,36 +5,34 @@
 #include <memory>
 
 namespace runtime {
-
     namespace ctx = boost::context;
 
-    class Goroutine {
+    // 继承 enable_shared_from_this 使得我们可以安全地从类内部获取 shared_ptr
+    class Goroutine : public std::enable_shared_from_this<Goroutine> {
     public:
         using Ptr = std::shared_ptr<Goroutine>;
         using Task = std::function<void()>;
 
-        // 构造函数：接受业务逻辑
         Goroutine(Task task, size_t stack_size = 64 * 1024);
 
-        // 恢复执行
         void resume();
 
-        // 静态方法：让当前正在运行的协程主动让出
         static void yield();
+
+        // TLS 机制：获取当前线程正在执行的协程
+        static Goroutine::Ptr current();
 
         bool is_finished() const { return finished_.load(); }
         uint64_t id() const { return id_; }
 
     private:
         uint64_t id_;
-        ctx::fiber ctx_;                // 协程上下文
+        ctx::fiber ctx_;
         std::atomic<bool> finished_{false};
         Task task_;
 
         static std::atomic<uint64_t> s_id_gen;
     };
 
-    // 模拟 go 关键字
     void go(Goroutine::Task task);
-
 } // namespace runtime
