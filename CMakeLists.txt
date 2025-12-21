@@ -17,7 +17,13 @@ file(GLOB_RECURSE SOURCES "src/*.cpp")
 list(APPEND SOURCES "main.cpp")
 
 add_executable(webFrame ${SOURCES}
-        src/db/MySQLPool.cpp)
+        src/db/core/mysql_driver.cpp
+        src/db/core/mysql_driver.h
+        src/db/core/mysql_pool.cpp
+        src/db/core/mysql_pool.h
+        src/db/orm/model.h
+        src/db/orm/query_builder.h
+        src/db/db.h)
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE
