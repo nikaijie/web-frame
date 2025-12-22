@@ -37,18 +37,18 @@ namespace db {
             MySQLDriver *drv = get_driver_safely();
 
             // 2. 执行查询
-            auto rows = drv->execute_query(sql);
+            auto result = drv->execute_query(sql);
 
             // 3. 归还连接
             MySQLPool::get().release(drv);
 
             // 4. 将原始结果映射为对象
             std::vector<T> results;
-            for (const auto &row: rows) {
+            results.reserve(result.rows.size());
+
+            for (auto &row : result.rows) {
                 T obj;
-                // 静态断言：确保 T 继承自 Model
-                static_assert(std::is_base_of<Model, T>::value, "T must inherit from db::Model");
-                obj.from_row(row);
+                obj.from_row(row); // 此时 result.res 还没析构，指针绝对安全
                 results.push_back(std::move(obj));
             }
             return results;

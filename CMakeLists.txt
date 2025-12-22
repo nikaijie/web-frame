@@ -26,7 +26,6 @@ add_executable(webFrame ${SOURCES}
         src/db/db.h
         include/runtime/spinlock.h
         src/test/mysql.h
-        include/web/core/context.h
         src/web/core/gee.cpp
         include/web/core/gee.h
         include/runtime/web_io.h
@@ -34,7 +33,8 @@ add_executable(webFrame ${SOURCES}
         include/runtime/context/iocontext.h
         include/runtime/context/db_context.h
         include/runtime/context/web_context.h
-        src/runtime/context/web_context.cpp)
+        src/runtime/context/web_context.cpp
+        src/test/web.h)
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE

@@ -48,7 +48,7 @@ namespace db {
         }
     }
 
-    std::vector<RawRow> MySQLDriver::execute_query(const std::string &sql) {
+    QueryResult MySQLDriver::execute_query(const std::string &sql) {
         int status, err;
 
         // 所有的 query 操作依然使用异步版本，这样能保证多协程并发时不阻塞 Worker 线程
@@ -64,8 +64,8 @@ namespace db {
             wait_io(status);
             status = mysql_store_result_cont(&res, mysql_, status);
         }
-
-        return parse_result(res);
+        std::vector<RawRow> rows = parse_result(res);
+        return QueryResult(res, std::move(rows));
     }
 
     int MySQLDriver::execute_update(const std::string &sql) {
