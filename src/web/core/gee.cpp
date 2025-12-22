@@ -10,10 +10,8 @@
 #include "runtime/context/web_context.h"
 
 namespace gee {
-    void Engine::add_route(std::string method, std::string path, HandlerFunc handler) {
-        std::string key = method + "-" + path;
-        routes_[key] = std::move(handler);
-    }
+
+
 
     void Engine::Run(int port) {
         int listen_fd = create_listen_socket(port);
@@ -39,17 +37,22 @@ namespace gee {
             gee::WebContext ctx(client_fd);
 
             if (ctx.parse()) {
-                std::string key = std::string(ctx.method()) + "-" + std::string(ctx.path());
-                if (routes_.count(key)) {
-                    routes_[key](&ctx);
-                    ctx.String(200, "");
+                auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
+                if (node) {
+                    ctx.set_params(std::move(params)); // 记得给 WebContext 加上这个方法
+                    std::string key = std::string(ctx.method()) + "-" + node->pattern;
+                    if (routes_.count(key)) {
+                        routes_[key](&ctx);
+                        ctx.String(200, "");
+                    } else {
+                        ctx.String(400, "{\"state\":400, \"message\":\"Bad Request\"}");
+                    }
                 } else {
-                    ctx.String(404, "{\"state\":404, \"message\":\"Not Found\"}");
+                    ctx.String(404, "404 Not Found");
                 }
             } else {
                 ctx.String(400, "{\"state\":400, \"message\":\"Bad Request\"}");
             }
-
             ::close(client_fd);
         });
     }

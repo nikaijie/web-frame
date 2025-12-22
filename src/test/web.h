@@ -80,6 +80,12 @@ int web_text() {
         ctx->res_.set_raw_data(200, "success", std::move(json));
     });
     spdlog::info("Gee Framework is running on http://localhost:8080");
+
+    app.GET("/user/:name/:age", [](gee::WebContext *ctx) {
+        auto name = ctx->Param("name");
+        auto age = ctx->Param("age");
+        ctx->res_.set_raw_data(200, "success", std::move(name));
+    });
     app.Run(8080);
 
     return 0;
