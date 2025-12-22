@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 # 1. 寻找 Boost 库
 find_package(Boost REQUIRED COMPONENTS context)
+find_package(spdlog REQUIRED)
+find_package(fmt REQUIRED)
 
 # 2. 指定 MariaDB 路径 (请确保已执行 brew install mariadb-connector-c)
 set(MARIADB_PATH "/opt/homebrew/opt/mariadb-connector-c")
@@ -16,6 +18,7 @@ set(MARIADB_PATH "/opt/homebrew/opt/mariadb-connector-c")
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 list(APPEND SOURCES "main.cpp")
 
+# 4. 创建可执行文件 (必须先定义这个 target)
 add_executable(webFrame ${SOURCES}
         src/db/core/mysql_driver.cpp
         src/db/core/mysql_driver.h
@@ -33,8 +36,10 @@ add_executable(webFrame ${SOURCES}
         include/runtime/context/iocontext.h
         include/runtime/context/db_context.h
         include/runtime/context/web_context.h
+        src/util/logger.h
         src/runtime/context/web_context.cpp
-        src/test/web.h)
+        src/test/web.h
+        src/util/logger.h)
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE
@@ -44,11 +49,12 @@ target_include_directories(webFrame PRIVATE
         ${MARIADB_PATH}/include/mariadb # 关键：MariaDB 的 mysql.h 通常在这里
 )
 
-# 5. 链接库 (直接链接 dylib 文件最稳妥，避免路径歧义)
 target_link_libraries(webFrame PRIVATE
         Boost::context
+        spdlog::spdlog
+        fmt::fmt
         "${MARIADB_PATH}/lib/mariadb/libmariadb.dylib"
 )
 
-# 6. 添加异步编译宏
-add_definitions(-DMARIADB_NONBLOCKING=1)
+# 7. 添加宏定义
+target_compile_definitions(webFrame PRIVATE MARIADB_NONBLOCKING=1)

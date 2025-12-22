@@ -1,5 +1,6 @@
 #include "mysql_pool.h"
 #include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "runtime/goroutine.h"
 
@@ -9,16 +10,15 @@ namespace db {
         std::lock_guard<std::mutex> lock(mtx_);
         for (int i = 0; i < size; ++i) {
             auto *driver = new MySQLDriver();
-            // 调用我们之前写的同步连接函数
             if (driver->connect_sync(host, user, pass, dbname)) {
                 pool_.push(driver);
             } else {
-                std::cerr << "MySQLPool: Failed to connect index " << i << std::endl;
+                spdlog::error("MySQLPool: Failed to connect index {}",i);
                 delete driver;
             }
         }
         capacity_ = (int) pool_.size();
-        std::cout << "MySQLPool: Initialized with " << capacity_ << " connections." << std::endl;
+        spdlog::info("MySQLPool: Initialized with {}", capacity_);
     }
 
     MySQLDriver *MySQLPool::acquire() {

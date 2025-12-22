@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <spdlog/spdlog.h>
 
 #include "runtime/context/web_context.h"
 
@@ -23,6 +24,7 @@ namespace gee {
 
             if (client_fd < 0) {
                 if (errno == EAGAIN || errno == EINTR) continue;
+                spdlog::error("client_fd appear panic");
                 break;
             }
 
@@ -39,11 +41,7 @@ namespace gee {
             if (ctx.parse()) {
                 std::string key = std::string(ctx.method()) + "-" + std::string(ctx.path());
                 if (routes_.count(key)) {
-                    // 业务代码示例：
-                    // routes_[key] 内部可以写：ctx->res_.set_result(0, "success", "{\"id\":1}");
                     routes_[key](&ctx);
-
-                    // 统一调用出口：不传 text，让 String 自动去序列化 res_
                     ctx.String(200, "");
                 } else {
                     ctx.String(404, "{\"state\":404, \"message\":\"Not Found\"}");

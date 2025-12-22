@@ -27,15 +27,14 @@ Scheduler::~Scheduler() {
 
 void Scheduler::start(size_t thread_count) {
     // 1. 启动 Netpoller IO 线程
-    // 我们让 IO 线程独立于 Worker 运行，专门负责监听 kqueue 事件
     std::thread io_thread([]() {
         Netpoller::get().poll_loop();
     });
-    io_thread.detach(); // 后台运行，生命周期随进程
-
+    io_thread.detach();
     // 2. 启动指定数量的 Worker 线程
     for (size_t i = 0; i < thread_count; ++i) {
         workers_.emplace_back(&Scheduler::worker_loop, this);
+        workers_[i].detach();
     }
 }
 

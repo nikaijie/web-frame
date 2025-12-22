@@ -1,4 +1,6 @@
 #include <iostream>
+#include <spdlog/spdlog.h>
+
 #include "web/core/gee.h"
 #include "runtime/scheduler.h"
 #include "../src/db/db.h"
@@ -69,23 +71,15 @@ int web_text() {
 
     // 3. 注册业务路由 - 示例 1: 简单的 Ping-Pong
     app.GET("/ping", [](gee::WebContext *ctx) {
-        // 1. 从数据库取数据
         auto results = db::table<Employee>("employees")
                 .where("salary", ">", "8344")
                 .model();
 
         std::string json = Employee::serialize_array(results);
 
-        // 4. 交给 Response
         ctx->res_.set_raw_data(200, "success", std::move(json));
-
-        // 5. 触发发送
-        ctx->String(200, "");
     });
-
-    // 6. 启动引擎
-    // Run 函数内部是一个主循环，不断 accept 新连接并开启 handle_http_task 协程
-    std::cout << "Gee Framework is running on http://localhost:8080" << std::endl;
+    spdlog::info("Gee Framework is running on http://localhost:8080");
     app.Run(8080);
 
     return 0;
