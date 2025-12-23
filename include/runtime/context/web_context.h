@@ -66,5 +66,11 @@ namespace gee {
         // 获取请求信息
         std::string_view method() const { return req_.method; }
         std::string_view path() const { return req_.path; }
+
+
+        //post表单
+        std::string PostForm(const std::string &key);
+        // 获取原始 Body (用于 JSON 等)
+        std::string_view Body();
     };
 }
