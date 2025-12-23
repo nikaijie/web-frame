@@ -10,9 +10,6 @@
 #include "runtime/context/web_context.h"
 
 namespace gee {
-
-
-
     void Engine::Run(int port) {
         int listen_fd = create_listen_socket(port);
         while (true) {
@@ -35,23 +32,28 @@ namespace gee {
     void Engine::handle_http_task(int client_fd) {
         runtime::go([this, client_fd]() {
             gee::WebContext ctx(client_fd);
-
-            if (ctx.parse()) {
-                auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
-                if (node) {
-                    ctx.set_params(std::move(params)); // 记得给 WebContext 加上这个方法
-                    std::string key = std::string(ctx.method()) + "-" + node->pattern;
-                    if (routes_.count(key)) {
-                        routes_[key](&ctx);
-                        ctx.String(200, "");
+            try {
+                if (ctx.parse()) {
+                    auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
+                    if (node) {
+                        ctx.set_params(std::move(params));
+                        std::string key = std::string(ctx.method()) + "-" + node->pattern;
+                        if (routes_.count(key)) {
+                            routes_[key](&ctx);
+                            if (!ctx.res_.is_sent) {
+                                ctx.JSON(gee::StateCode::OK, "OK","{}");
+                            }
+                        } else {
+                            ctx.JSON(gee::StateCode::SERVER_ERROR, "Handler Missing", "{}");
+                        }
                     } else {
-                        ctx.String(400, "{\"state\":400, \"message\":\"Bad Request\"}");
+                        ctx.JSON(gee::StateCode::NOT_FOUND, "404 Not Found", "{}");
                     }
                 } else {
-                    ctx.String(404, "404 Not Found");
+                    ctx.JSON(gee::StateCode::PARAM_ERROR, "Invalid HTTP Request", "{}");
                 }
-            } else {
-                ctx.String(400, "{\"state\":400, \"message\":\"Bad Request\"}");
+            }catch (std::exception& e) {
+                spdlog::error(e.what());
             }
             ::close(client_fd);
         });

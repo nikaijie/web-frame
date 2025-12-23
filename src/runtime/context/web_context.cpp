@@ -33,34 +33,6 @@ namespace gee {
         return true;
     }
 
-    void WebContext::String(int code, const std::string &text) {
-        std::string final_body;
-
-        // 如果业务层手动传了 text (比如返回 HTML 或自定义文本)
-        if (!text.empty()) {
-            final_body = text;
-        } else {
-            // 否则，自动序列化 Response 对象里的 state, message, data
-            final_body = res_.serialize();
-        }
-
-        // 构造完整的 HTTP 响应报文
-        std::string http_packet;
-        http_packet.reserve(256 + final_body.size());
-
-        // 注意：状态码优先使用 res_ 里的业务状态码
-        int status = (res_.state != 200) ? res_.state : code;
-
-        http_packet += "HTTP/1.1 " + std::to_string(status) + " OK\r\n";
-        http_packet += "Content-Type: application/json; charset=utf-8\r\n";
-        http_packet += "Content-Length: " + std::to_string(final_body.size()) + "\r\n";
-        http_packet += "Connection: close\r\n";
-        http_packet += "\r\n";
-        http_packet += final_body;
-
-        // 协程版异步写入，发送到网络
-        runtime::web_write(this->fd, http_packet.data(), http_packet.size());
-    }
 
     // 辅助：查找 \r\n\r\n
     size_t WebContext::find_header_end() {
