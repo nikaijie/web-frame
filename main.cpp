@@ -15,7 +15,7 @@ int main() {
         ctx->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::success), results);
     });
 
-    app.GET("/user/:name/:age", [](gee::WebContext *ctx) {
+    app.GET("/user/:name", [](gee::WebContext *ctx) {
         auto name = ctx->Param("name");
         auto age = ctx->Param("age");
 
@@ -27,7 +27,7 @@ int main() {
         ctx->JSON(gee::StateCode::OK, "success", std::move(body));
     });
 
-    app.GET("/user", [](gee::WebContext *ctx) {
+    app.GET("/user/info", [](gee::WebContext *ctx) {
         auto name = ctx->Query("name");
         std::string body = "\"" + name + "\"";
         ctx->JSON(gee::StateCode::OK, "success", std::move(body));
