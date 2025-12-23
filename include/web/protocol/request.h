@@ -20,6 +20,8 @@ namespace gee {
 
         bool parse(int client_fd);
 
+        size_t peek_content_length();
+
         size_t find_header_end();
 
         bool do_parse_header(size_t total_header_size);
