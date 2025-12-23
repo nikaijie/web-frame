@@ -3,118 +3,80 @@
 #include <charconv>
 
 #include "runtime/web_io.h"
+#include "../src/db/db.h"
 
 
 #include <string_view>
 
 namespace gee {
-    bool WebContext::parse() {
-        // --- 阶段 1: 读取并解析 Header ---
-        while (true) {
-            size_t header_end_pos = find_header_end();
-            if (header_end_pos != std::string_view::npos) {
-                // 找到了 \r\n\r\n，开始解析 Header
-                if (!do_parse_header(header_end_pos + 4)) return false;
-                break;
-            }
+    void WebContext::set_params(std::unordered_map<std::string, std::string> params) {
+        req_.params_ = std::move(params);
+    }
 
-            if (runtime::web_read(this->fd, this->raw_data_) <= 0) return false;
-        }
+    // 业务层调用：ctx->Param("userId")
+    std::string WebContext::Param(const std::string &key) {
+        auto it = req_.params_.find(key);
+        return it != req_.params_.end() ? it->second : "";
+    }
 
-        // --- 阶段 2: 根据 Content-Length 读取 Body ---
-        if (req_.content_length > 0) {
-            while (raw_data_.size() < req_.header_size + req_.content_length) {
-                if (runtime::web_read(this->fd, this->raw_data_) <= 0) return false;
-            }
-            // 绑定 Body 的 string_view
-            req_.body = std::string_view(raw_data_.data() + req_.header_size, req_.content_length);
-        }
-
-        return true;
+    std::string WebContext::Query(const std::string &key) {
+        auto it = req_.query_params_.find(key);
+        return (it != req_.query_params_.end()) ? it->second : "";
     }
 
 
-    // 辅助：查找 \r\n\r\n
-    size_t WebContext::find_header_end() {
-        std::string_view sv(raw_data_.data(), raw_data_.size());
-        return sv.find("\r\n\r\n");
+    void WebContext::send_response(int http_code, const std::string &text) {
+        if (res_.is_sent) return; // 状态锁，防止重复发送
+
+        // 1. 让 Response 构造完整的 HTTP 报文流
+        std::string http_packet = res_.build_http_packet(http_code, text);
+        runtime::web_write(this->fd, http_packet.data(), http_packet.size());
+        res_.is_sent = true;
     }
 
-    void WebContext::parse_query_string(std::string_view query) {
-        size_t pos = 0;
-        while (pos < query.size()) {
-            size_t ampersand = query.find('&', pos);
-            std::string_view pair = (ampersand == std::string_view::npos)
-                                        ? query.substr(pos)
-                                        : query.substr(pos, ampersand - pos);
 
-            size_t equal = pair.find('=');
-            if (equal != std::string_view::npos) {
-                std::string_view key_sv = pair.substr(0, equal);
-                std::string_view val_sv = pair.substr(equal + 1);
+    void WebContext::JSON(gee::StateCode code, const std::string &msg, std::string &&raw_json) {
+        if (!raw_json.empty()) {
+            char first = raw_json.front();
+            char last = raw_json.back();
 
-                // 存入 Request 对象的 query_params map 中
-                req_.query_params_[std::string(key_sv)] = std::string(val_sv);
+            // 扩展校验：允许 { } , [ ] , 以及 " "
+            bool is_obj = (first == '{' && last == '}');
+            bool is_arr = (first == '[' && last == ']');
+            bool is_str = (first == '\"' && last == '\"'); // 新增：允许 JSON 字符串格式
+
+            if (!is_obj && !is_arr && !is_str) {
+                throw std::invalid_argument(
+                    "Invalid JSON fragment: data must be wrapped in {}, [] or \"\"."
+                );
             }
-
-            if (ampersand == std::string_view::npos) break;
-            pos = ampersand + 1;
-        }
-    }
-
-    bool WebContext::do_parse_header(size_t total_header_size) {
-        req_.header_size = total_header_size;
-        std::string_view full_data(raw_data_.data(), total_header_size);
-
-        // --- 1. 解析请求行 (e.g., "GET /user?id=1 HTTP/1.1") ---
-        size_t line_end = full_data.find("\r\n");
-        if (line_end == std::string_view::npos) return false;
-        std::string_view request_line = full_data.substr(0, line_end);
-
-        size_t m_end = request_line.find(' ');
-        size_t p_end = request_line.find(' ', m_end + 1);
-        if (m_end == std::string_view::npos || p_end == std::string_view::npos) return false;
-
-        req_.method = request_line.substr(0, m_end);
-
-        // 关键逻辑：切分 Path 和 Query String
-        std::string_view full_path = request_line.substr(m_end + 1, p_end - m_end - 1);
-        size_t question_mark = full_path.find('?');
-        if (question_mark != std::string_view::npos) {
-            req_.path = full_path.substr(0, question_mark); // 纯净路径给 Trie 树
-            std::string_view query_str = full_path.substr(question_mark + 1);
-            parse_query_string(query_str); // 解析参数
         } else {
-            req_.path = full_path;
+            raw_json = "{}";
         }
+        res_.set_raw_data(static_cast<int>(code), msg, std::move(raw_json));
+        this->send_response(200);
+    }
 
-        // --- 2. 逐行解析 Header Fields ---
-        size_t pos = line_end + 2;
-        while (pos < total_header_size) {
-            size_t next_line = full_data.find("\r\n", pos);
-            if (next_line == std::string_view::npos) break;
 
-            std::string_view line = full_data.substr(pos, next_line - pos);
-            if (line.empty()) break; // 遇到空行说明 Header 结束
+    /**
+     * @brief 处理单个 Model 对象
+     */
+    void WebContext::JSON(gee::StateCode code, const std::string &msg, const db::Model &model) {
+        std::string body;
+        body.reserve(128);
+        model.write_json(body);
+        res_.set_raw_data(static_cast<int>(code), msg, std::move(body));
+        this->send_response(static_cast<int>(code));
+    }
 
-            size_t colon = line.find(':');
-            if (colon != std::string_view::npos) {
-                std::string_view key = line.substr(0, colon);
-                std::string_view value = line.substr(colon + 1);
 
-                // 去除前面的空格
-                while (!value.empty() && value[0] == ' ') value.remove_prefix(1);
 
-                req_.headers[std::string(key)] = std::string(value);
 
-                // 提取 Content-Length
-                if (key == "Content-Length" || key == "content-length") {
-                    std::from_chars(value.data(), value.data() + value.size(), req_.content_length);
-                }
-            }
-            pos = next_line + 2;
-        }
 
-        return true;
+    /**
+     * @brief 发送纯文本/HTML 响应 (例如 404)
+     */
+    void WebContext::String(int http_code, const std::string &text) {
+        this->send_response(http_code, text);
     }
 }

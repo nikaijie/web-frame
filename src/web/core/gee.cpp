@@ -33,7 +33,7 @@ namespace gee {
         runtime::go([this, client_fd]() {
             gee::WebContext ctx(client_fd);
             try {
-                if (ctx.parse()) {
+                if (ctx.req_.parse(client_fd)) {
                     auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
                     if (node) {
                         ctx.set_params(std::move(params));
