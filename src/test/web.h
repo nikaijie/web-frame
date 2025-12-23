@@ -86,6 +86,12 @@ int web_text() {
         auto age = ctx->Param("age");
         ctx->res_.set_raw_data(200, "success", std::move(name));
     });
+
+    app.GET("/user", [](gee::WebContext *ctx) {
+        auto name = ctx->Query("name");
+        auto age = ctx->Query("age");
+        ctx->res_.set_raw_data(200, "success", std::move(name));
+    });
     app.Run(8080);
 
     return 0;
