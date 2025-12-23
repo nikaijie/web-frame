@@ -10,11 +10,6 @@
 #include "runtime/context/web_context.h"
 
 namespace gee {
-    void Engine::add_route(std::string method, std::string path, HandlerFunc handler) {
-        std::string key = method + "-" + path;
-        routes_[key] = std::move(handler);
-    }
-
     void Engine::Run(int port) {
         int listen_fd = create_listen_socket(port);
         while (true) {
@@ -37,19 +32,29 @@ namespace gee {
     void Engine::handle_http_task(int client_fd) {
         runtime::go([this, client_fd]() {
             gee::WebContext ctx(client_fd);
-
-            if (ctx.parse()) {
-                std::string key = std::string(ctx.method()) + "-" + std::string(ctx.path());
-                if (routes_.count(key)) {
-                    routes_[key](&ctx);
-                    ctx.String(200, "");
+            try {
+                if (ctx.parse()) {
+                    auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
+                    if (node) {
+                        ctx.set_params(std::move(params));
+                        std::string key = std::string(ctx.method()) + "-" + node->pattern;
+                        if (routes_.count(key)) {
+                            routes_[key](&ctx);
+                            if (!ctx.res_.is_sent) {
+                                ctx.JSON(gee::StateCode::OK, "OK","{}");
+                            }
+                        } else {
+                            ctx.JSON(gee::StateCode::SERVER_ERROR, "Handler Missing", "{}");
+                        }
+                    } else {
+                        ctx.JSON(gee::StateCode::NOT_FOUND, "404 Not Found", "{}");
+                    }
                 } else {
-                    ctx.String(404, "{\"state\":404, \"message\":\"Not Found\"}");
+                    ctx.JSON(gee::StateCode::PARAM_ERROR, "Invalid HTTP Request", "{}");
                 }
-            } else {
-                ctx.String(400, "{\"state\":400, \"message\":\"Bad Request\"}");
+            }catch (std::exception& e) {
+                spdlog::error(e.what());
             }
-
             ::close(client_fd);
         });
     }

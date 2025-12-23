@@ -33,34 +33,6 @@ namespace gee {
         return true;
     }
 
-    void WebContext::String(int code, const std::string &text) {
-        std::string final_body;
-
-        // 如果业务层手动传了 text (比如返回 HTML 或自定义文本)
-        if (!text.empty()) {
-            final_body = text;
-        } else {
-            // 否则，自动序列化 Response 对象里的 state, message, data
-            final_body = res_.serialize();
-        }
-
-        // 构造完整的 HTTP 响应报文
-        std::string http_packet;
-        http_packet.reserve(256 + final_body.size());
-
-        // 注意：状态码优先使用 res_ 里的业务状态码
-        int status = (res_.state != 200) ? res_.state : code;
-
-        http_packet += "HTTP/1.1 " + std::to_string(status) + " OK\r\n";
-        http_packet += "Content-Type: application/json; charset=utf-8\r\n";
-        http_packet += "Content-Length: " + std::to_string(final_body.size()) + "\r\n";
-        http_packet += "Connection: close\r\n";
-        http_packet += "\r\n";
-        http_packet += final_body;
-
-        // 协程版异步写入，发送到网络
-        runtime::web_write(this->fd, http_packet.data(), http_packet.size());
-    }
 
     // 辅助：查找 \r\n\r\n
     size_t WebContext::find_header_end() {
@@ -68,44 +40,74 @@ namespace gee {
         return sv.find("\r\n\r\n");
     }
 
+    void WebContext::parse_query_string(std::string_view query) {
+        size_t pos = 0;
+        while (pos < query.size()) {
+            size_t ampersand = query.find('&', pos);
+            std::string_view pair = (ampersand == std::string_view::npos)
+                                        ? query.substr(pos)
+                                        : query.substr(pos, ampersand - pos);
+
+            size_t equal = pair.find('=');
+            if (equal != std::string_view::npos) {
+                std::string_view key_sv = pair.substr(0, equal);
+                std::string_view val_sv = pair.substr(equal + 1);
+
+                // 存入 Request 对象的 query_params map 中
+                req_.query_params_[std::string(key_sv)] = std::string(val_sv);
+            }
+
+            if (ampersand == std::string_view::npos) break;
+            pos = ampersand + 1;
+        }
+    }
+
     bool WebContext::do_parse_header(size_t total_header_size) {
         req_.header_size = total_header_size;
         std::string_view full_data(raw_data_.data(), total_header_size);
 
-        // 1. 解析请求行 (e.g., "POST /api/data HTTP/1.1")
+        // --- 1. 解析请求行 (e.g., "GET /user?id=1 HTTP/1.1") ---
         size_t line_end = full_data.find("\r\n");
         if (line_end == std::string_view::npos) return false;
         std::string_view request_line = full_data.substr(0, line_end);
 
-        // 解析 Method, Path
         size_t m_end = request_line.find(' ');
         size_t p_end = request_line.find(' ', m_end + 1);
         if (m_end == std::string_view::npos || p_end == std::string_view::npos) return false;
 
         req_.method = request_line.substr(0, m_end);
-        req_.path = request_line.substr(m_end + 1, p_end - m_end - 1);
 
-        // 2. 逐行解析 Header Fields
+        // 关键逻辑：切分 Path 和 Query String
+        std::string_view full_path = request_line.substr(m_end + 1, p_end - m_end - 1);
+        size_t question_mark = full_path.find('?');
+        if (question_mark != std::string_view::npos) {
+            req_.path = full_path.substr(0, question_mark); // 纯净路径给 Trie 树
+            std::string_view query_str = full_path.substr(question_mark + 1);
+            parse_query_string(query_str); // 解析参数
+        } else {
+            req_.path = full_path;
+        }
+
+        // --- 2. 逐行解析 Header Fields ---
         size_t pos = line_end + 2;
-        while (pos < total_header_size - 2) {
-            // 减 2 是跳过最后的 \r\n
+        while (pos < total_header_size) {
             size_t next_line = full_data.find("\r\n", pos);
             if (next_line == std::string_view::npos) break;
 
             std::string_view line = full_data.substr(pos, next_line - pos);
-            if (line.empty()) break; // 到了 Header 与 Body 之间的空行
+            if (line.empty()) break; // 遇到空行说明 Header 结束
 
             size_t colon = line.find(':');
             if (colon != std::string_view::npos) {
                 std::string_view key = line.substr(0, colon);
                 std::string_view value = line.substr(colon + 1);
-                // 去除 value 前导空格
-                if (!value.empty() && value[0] == ' ') value.remove_prefix(1);
 
-                // 记录到 Map 中
-                req_.headers[key] = value;
+                // 去除前面的空格
+                while (!value.empty() && value[0] == ' ') value.remove_prefix(1);
 
-                // 特殊处理 Content-Length
+                req_.headers[std::string(key)] = std::string(value);
+
+                // 提取 Content-Length
                 if (key == "Content-Length" || key == "content-length") {
                     std::from_chars(value.data(), value.data() + value.size(), req_.content_length);
                 }
@@ -115,4 +117,4 @@ namespace gee {
 
         return true;
     }
-} // namespace gee
+}

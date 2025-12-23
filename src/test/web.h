@@ -45,21 +45,6 @@ struct Employee : public db::Model {
                 .append("\",\"salary\":").append(std::to_string(salary))
                 .append("}");
     }
-
-    // 静态函数：序列化 Employee 数组为 JSON
-    static std::string serialize_array(const std::vector<Employee> &employees) {
-        std::string json;
-        json.reserve(employees.size() * 120 + 2);
-        json.push_back('[');
-
-        for (size_t i = 0; i < employees.size(); ++i) {
-            employees[i].write_json(json);
-            if (i + 1 < employees.size()) json.push_back(',');
-        }
-
-        json.push_back(']');
-        return json; // NRVO，返回时 move
-    }
 };
 
 
@@ -69,15 +54,30 @@ int web_text() {
     // 2. 创建 Gee 引擎
     gee::Engine app;
 
-    // 3. 注册业务路由 - 示例 1: 简单的 Ping-Pong
     app.GET("/ping", [](gee::WebContext *ctx) {
         auto results = db::table<Employee>("employees")
                 .where("salary", ">", "8344")
                 .model();
 
-        std::string json = Employee::serialize_array(results);
+        ctx->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::success), results);
+    });
 
-        ctx->res_.set_raw_data(200, "success", std::move(json));
+    app.GET("/user/:name/:age", [](gee::WebContext *ctx) {
+        auto name = ctx->Param("name");
+        auto age = ctx->Param("age");
+
+        // 手动构造一个 JSON 对象字符串
+        std::string body;
+        body.reserve(64);
+        body.append("{\"name\":\"").append(name)
+                .append("\",\"age\":").append(age).append("}");
+        ctx->JSON(gee::StateCode::OK, "success", std::move(body));
+    });
+
+    app.GET("/user", [](gee::WebContext *ctx) {
+        auto name = ctx->Query("name");
+        std::string body = "\"" + name + "\"";
+        ctx->JSON(gee::StateCode::OK, "success", std::move(body));
     });
     spdlog::info("Gee Framework is running on http://localhost:8080");
     app.Run(8080);

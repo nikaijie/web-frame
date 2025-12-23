@@ -4,12 +4,13 @@
 #include <functional>
 
 
+#include "node.h"
 #include "runtime/context/web_context.h"
 
 
 namespace gee {
     // 定义 Handler 函数原型，接收 Context 指针
-    using HandlerFunc = std::function<void(WebContext*)>;
+    using HandlerFunc = std::function<void(WebContext *)>;
 
     class Engine {
     public:
@@ -36,11 +37,17 @@ namespace gee {
 
         void Run(int port);
 
-    private:
+        std::vector<std::string> parse_pattern(std::string_view pattern);
+
         void add_route(std::string method, std::string path, HandlerFunc handler);
 
+        std::pair<Node *, std::unordered_map<std::string, std::string> >
+        get_route(const std::string &method, const std::string &path);
+
+    private:
         // 路由表：Key 格式为 "METHOD-PATH"
         std::unordered_map<std::string, HandlerFunc> routes_;
+        std::unordered_map<std::string, Node *> roots_;
 
         int create_listen_socket(int port);
     };
