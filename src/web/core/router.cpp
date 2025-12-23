@@ -55,7 +55,7 @@ namespace gee {
 
     std::pair<Node *, std::unordered_map<std::string, std::string> >
     Engine::get_route(const std::string &method, const std::string &path) {
-        // 1. 解析请求路径 (例如: "/user/zhaixing/25" -> ["user", "zhaixing", "25"])
+        // 1. 解析请求路径
         std::vector<std::string> searchParts = parse_pattern(path);
         std::unordered_map<std::string, std::string> params;
 
@@ -66,31 +66,13 @@ namespace gee {
         }
 
         Node *root = it->second;
-        // 3. 调用 Trie 树的搜索逻辑
-        Node *n = root->search(searchParts, 0);
+
+        // 3. 【关键修改】：调用搜索逻辑时，直接把 params 传进去
+        // Node 内部会根据优先级匹配，并自动填好 :id 或 * 通配符对应的参数
+        Node *n = root->search(searchParts, 0, params);
 
         if (n != nullptr) {
-            // 4. 匹配成功，开始提取参数
-            // 解析注册时的规则 (例如: "/user/:name/:age" -> ["user", ":name", ":age"])
-            std::vector<std::string> parts = parse_pattern(n->pattern);
-
-            for (size_t i = 0; i < parts.size(); ++i) {
-                // 处理 :name 类型的动态参数
-                if (parts[i][0] == ':') {
-                    params[parts[i].substr(1)] = searchParts[i];
-                }
-                // 处理 *filepath 类型的通配符参数
-                if (parts[i][0] == '*' && parts[i].size() > 1) {
-                    // 将 searchParts 中从当前索引到末尾的所有部分用 "/" 连接
-                    std::string joinedPath;
-                    for (size_t j = i; j < searchParts.size(); ++j) {
-                        if (j > i) joinedPath += "/";
-                        joinedPath += searchParts[j];
-                    }
-                    params[parts[i].substr(1)] = joinedPath;
-                    break;
-                }
-            }
+            // 4. 【大幅简化】：参数已经在 search 过程中填好了，直接返回
             return {n, params};
         }
 

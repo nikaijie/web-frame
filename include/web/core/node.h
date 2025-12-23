@@ -45,39 +45,66 @@ struct Node {
 
         std::string part = parts[height];
 
-        // 查找子节点
-        Node *child = match_child(part);
+        // 插入时必须：寻找 part 字符串完全一致的子节点
+        // 不能使用原来的 match_child，因为插入是为了“建树”，必须精确
+        Node *child = nullptr;
+        for (auto c: children) {
+            if (c->part == part) {
+                child = c;
+                break;
+            }
+        }
 
-        // 如果没找到且不是模糊匹配，则新建节点
-        // 注意：这里要处理 child->part == part 的判断，避免重复创建
-        // 优化：match_child 在查找插入位置时应该找完全匹配的 part
-        if (child == nullptr || child->part != part) {
+        // 如果没找到完全匹配的，才新建
+        if (child == nullptr) {
             child = new Node();
             child->part = part;
             child->is_wild = (part[0] == ':' || part[0] == '*');
             children.push_back(child);
         }
 
-        // 递归向下
         child->insert(pattern, parts, height + 1);
     }
 
-    Node *search(const std::vector<std::string> &parts, int height) {
-        // 递归终止条件：搜到了末尾，或者遇到了通配符 *
-        if (parts.size() == height || (part.size() > 0 && part[0] == '*')) {
-            if (pattern.empty()) {
-                return nullptr; // 虽然路径对，但这个节点没注册过 handler（不是叶子节点）
-            }
+    // 传入 params 引用，用于存储 :id -> "123" 的映射
+    Node *search(const std::vector<std::string> &parts, int height,
+                 std::unordered_map<std::string, std::string> &params) {
+        // 1. 递归终止：搜到末尾或遇到 *
+        if (parts.size() == height || (this->part.size() > 0 && this->part[0] == '*')) {
+            if (this->pattern.empty()) return nullptr;
             return this;
         }
 
-        std::string part = parts[height];
-        // 拿到所有可能的子节点（静态匹配 + 动态匹配）
-        std::vector<Node *> list = match_children(part);
+        std::string target_part = parts[height];
 
-        for (Node *child: list) {
-            Node *result = child->search(parts, height + 1);
-            if (result != nullptr) return result;
+        // --- 优先级 1：精确匹配 ---
+        for (Node *child: children) {
+            if (!child->is_wild && child->part == target_part) {
+                Node *result = child->search(parts, height + 1, params);
+                if (result) return result;
+            }
+        }
+
+        // --- 优先级 2：动态参数 (:) ---
+        for (Node *child: children) {
+            if (child->part.size() > 0 && child->part[0] == ':') {
+                Node *result = child->search(parts, height + 1, params);
+                if (result) {
+                    // 在这里记录参数！
+                    // key 是 ":id" 去掉冒号，value 是当前路径里的字符串
+                    params[child->part.substr(1)] = target_part;
+                    return result;
+                }
+            }
+        }
+
+        // --- 优先级 3：通配符 (*) ---
+        for (Node *child: children) {
+            if (child->part.size() > 0 && child->part[0] == '*') {
+                // 通配符匹配剩下的所有部分，通常存为 path
+                // 这里逻辑简单处理，直接返回
+                return child;
+            }
         }
 
         return nullptr;
