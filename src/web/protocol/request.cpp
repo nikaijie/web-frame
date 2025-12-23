@@ -3,6 +3,7 @@
 #include "web/protocol/request.h"
 
 #include <charconv>
+#include <iostream>
 
 #include "runtime/web_io.h"
 
@@ -49,10 +50,87 @@ namespace gee {
             // 地址固定，直接绑定 Body
             this->body = std::string_view(raw_data_.data() + this->header_size, this->content_length);
         }
-
+        parse_body();
         return true;
     }
 
+
+    void Request::parse_body() {
+        if (method != "POST" && method != "PUT" && method != "PATCH") return;
+        if (body.empty()) return;
+
+        auto it = headers.find("Content-Type");
+        if (it == headers.end()) {
+            return;
+        }
+        std::string_view content_type = it->second;
+
+        //  处理传统表单 (application/x-www-form-urlencoded)
+        std::cout << content_type << std::endl;
+        if (content_type.find("application/x-www-form-urlencoded") != std::string_view::npos) {
+            parse_form_urlencoded();
+        }
+        //  处理 JSON (application/json)
+        else if (content_type.find("application/json") != std::string_view::npos) {
+        }
+        // 文件上传 (multipart/form-data)
+        else if (content_type.find("multipart/form-data") != std::string_view::npos) {
+            // TODO: 手工实现非拷贝的文件解析逻辑
+        }
+    }
+
+    void Request::parse_form_urlencoded() {
+        std::string_view current = body;
+        std::cout << "--- [DEBUG] Parsing POST Body ---" << std::endl;
+        std::cout << "Raw Body: " << body << std::endl;
+        while (!current.empty()) {
+            // 1. 找到 & 分隔符
+            size_t pair_end = current.find('&');
+            std::string_view pair = (pair_end == std::string_view::npos) ? current : current.substr(0, pair_end);
+
+            // 2. 找到 = 分隔符
+            size_t sep = pair.find('=');
+            if (sep != std::string_view::npos) {
+                std::string_view raw_key = pair.substr(0, sep);
+                std::string_view raw_val = pair.substr(sep + 1);
+
+                // 3. 存储解析后的键值对 (记得调用之前写好的 url_decode)
+                post_form_[url_decode(raw_key)] = url_decode(raw_val);
+            }
+
+            // 4. 移动指针到下一个键值对
+            if (pair_end == std::string_view::npos) break;
+            current.remove_prefix(pair_end + 1);
+        }
+    }
+
+    std::string Request::url_decode(std::string_view str) {
+        std::string res;
+        res.reserve(str.size()); // 预分配内存，减少重分配
+        for (size_t i = 0; i < str.size(); ++i) {
+            if (str[i] == '+') {
+                res += ' '; // 表单中 '+' 通常代表空格
+            } else if (str[i] == '%' && i + 2 < str.size()) {
+                // 解析 %XX 十六进制字符
+                char high = str[i + 1];
+                char low = str[i + 2];
+
+                // 将十六进制转为整数
+                auto hex_to_int = [](char c) -> int {
+                    if (c >= '0' && c <= '9') return c - '0';
+                    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                    return 0;
+                };
+
+                res += static_cast<char>((hex_to_int(high) << 4) | hex_to_int(low));
+                i += 2; // 跳过已解析的两个十六进制字符
+            } else {
+                res += str[i];
+            }
+        }
+        return res;
+    }
 
     size_t Request::peek_content_length() {
         // 将已读到的 Header 数据转为 string_view 方便查找
@@ -160,16 +238,20 @@ namespace gee {
 
             size_t colon = line.find(':');
             if (colon != std::string_view::npos) {
-                std::string_view key = line.substr(0, colon);
-                std::string_view value = line.substr(colon + 1);
+                std::string_view key_view = line.substr(0, colon);
+                std::string_view value_view = line.substr(colon + 1);
+                auto trim = [](std::string_view s) {
+                    size_t first = s.find_first_not_of(" \t\r\n");
+                    if (first == std::string_view::npos) return std::string_view();
+                    size_t last = s.find_last_not_of(" \t\r\n");
+                    return s.substr(first, (last - first + 1));
+                };
 
-                // 去除前面的空格
-                while (!value.empty() && value[0] == ' ') value.remove_prefix(1);
+                std::string key = std::string(trim(key_view));
+                std::string value = std::string(trim(value_view));
 
-                this->headers[std::string(key)] = std::string(value);
-
-                // 提取 Content-Length
-                if (key == "Content-Length" || key == "content-length") {
+                this->headers[key] = value;
+                if (strcasecmp(key.c_str(), "Content-Length") == 0) {
                     std::from_chars(value.data(), value.data() + value.size(), this->content_length);
                 }
             }

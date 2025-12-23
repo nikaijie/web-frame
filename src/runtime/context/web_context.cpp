@@ -69,14 +69,21 @@ namespace gee {
         this->send_response(static_cast<int>(code));
     }
 
-
-
-
-
     /**
      * @brief 发送纯文本/HTML 响应 (例如 404)
      */
     void WebContext::String(int http_code, const std::string &text) {
         this->send_response(http_code, text);
+    }
+
+
+    std::string WebContext::PostForm(const std::string &key) {
+        auto it = req_.post_form_.find(key);
+        return it != req_.post_form_.end() ? it->second : "";
+    }
+
+    // 获取原始 Body (用于 JSON 等)
+    std::string_view WebContext::Body() {
+        return req_.body;
     }
 }

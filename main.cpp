@@ -32,6 +32,21 @@ int main() {
         std::string body = "\"" + name + "\"";
         ctx->JSON(gee::StateCode::OK, "success", std::move(body));
     });
+
+    app.POST("/login", [](gee::WebContext *c) {
+        // 从我们刚写好的 post_form_ 中取值
+        std::string username = c->PostForm("username");
+        std::string password = c->PostForm("password");
+        std::string body;
+        body.reserve(64);
+        body.append("{\"username\":\"").append(username)
+                .append("\",\"password\":").append(password).append("}");
+        if (username == "zhaixing" && password == "123") {
+            c->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::success), std::move(body));
+        } else {
+            c->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::failed), "{}");
+        }
+    });
     app.Run(8080);
     return 0;
 }

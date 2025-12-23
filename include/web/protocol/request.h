@@ -7,16 +7,30 @@ namespace gee {
     struct Request {
         std::string_view method;
         std::string_view path;
-        std::unordered_map<std::string_view, std::string_view> headers;
+        std::unordered_map<std::string, std::string> headers;
         std::string_view body;
 
         size_t content_length = 0; // Body 长度
         size_t header_size = 0; // 记录 Header 结束的位置，方便定位 Body
 
+        std::unordered_map<std::string, std::string> post_form_; // 存放 POST 表单数据 (application/x-www-form-urlencoded)
+
         std::unordered_map<std::string, std::string> params_; //存放user/:name/:age后面的参数
         std::unordered_map<std::string, std::string> query_params_; //存放？name=xx&age=18 后面的参数
 
         std::vector<char> raw_data_ = {}; //io拷贝时的数组
+
+        // 存放 JSON 对象 (建议集成 nlohmann/json，或者先存为原始 string)
+        std::string json_body_;
+
+        // 存放文件上传数据
+        struct FormFile {
+            std::string filename;
+            std::string content_type;
+            std::string data; // 或者是文件的起始指针
+        };
+
+        std::unordered_map<std::string, FormFile> files_;
 
         bool parse(int client_fd);
 
@@ -27,5 +41,10 @@ namespace gee {
         bool do_parse_header(size_t total_header_size);
 
         void parse_query_string(std::string_view query);
+
+        void parse_body(); //解析body
+        std::string url_decode(std::string_view str); //URL 解码逻辑
+
+        void parse_form_urlencoded();
     };
 }
