@@ -7,7 +7,7 @@ int main() {
     runtime::Scheduler::get().start(8);
     db::init("127.0.0.1", "root", "123456789", "test", 50);
     gee::Engine app;
-    app.GET("/ping", [](gee::WebContext *ctx) {
+    app.GET("/getUsers", [](gee::WebContext *ctx) {
         auto results = db::table<Employee>("employees")
                 .where("salary", ">", "8344")
                 .model();
@@ -34,7 +34,6 @@ int main() {
     });
 
     app.POST("/login", [](gee::WebContext *c) {
-        // 从我们刚写好的 post_form_ 中取值
         std::string username = c->PostForm("username");
         std::string password = c->PostForm("password");
         std::string body;
@@ -46,6 +45,12 @@ int main() {
         } else {
             c->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::failed), "{}");
         }
+    });
+
+    app.POST("/upload", [](gee::WebContext *c) {
+        auto filenames = c->req_.get_uploaded_files();
+        std::cout << filenames[0] << std::endl;
+        c->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::failed), "{}");
     });
     app.Run(8080);
     return 0;
