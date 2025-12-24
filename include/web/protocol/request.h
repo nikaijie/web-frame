@@ -42,9 +42,22 @@ namespace gee {
 
         void parse_query_string(std::string_view query);
 
+        std::vector<std::string> uploaded_files_; // 存储已保存的文件完整路径
+
         void parse_body(); //解析body
         std::string url_decode(std::string_view str); //URL 解码逻辑
 
         void parse_form_urlencoded();
+
+        bool handle_multipart_streaming(int client_fd);
+
+        std::string extract_boundary(std::string_view content_type);
+
+        std::string_view get_header(const std::string &key) const;
+
+
+        const std::vector<std::string> &get_uploaded_files() const {
+            return uploaded_files_;
+        }
     };
 }

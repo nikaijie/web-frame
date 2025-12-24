@@ -43,7 +43,9 @@ add_executable(webFrame ${SOURCES}
         include/web/core/node.h
         src/web/core/router.cpp
         src/model/Employee.cpp
-        src/web/protocol/request.cpp)
+        src/web/protocol/request.cpp
+        include/web/protocol/MultipartProcessor.h
+        include/pool/io_task_pool.h)
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE

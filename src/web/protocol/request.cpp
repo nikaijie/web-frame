@@ -6,54 +6,125 @@
 #include <iostream>
 
 #include "runtime/web_io.h"
+#include "web/protocol/MultipartProcessor.h"
+#include "../../../include/pool/io_task_pool.h"
 
 namespace gee {
     bool Request::parse(int client_fd) {
-        const size_t MAX_HEADER_SIZE = 8192; // 8KB
-        const size_t MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
+        const size_t MAX_HEADER_SIZE = 8192;
+        // 普通请求的限制，文件上传可以单独放开
+        const size_t MAX_NORMAL_BODY_SIZE = 10 * 1024 * 1024;
 
-        // --- 读 Header ---
+        //   Header
         while (true) {
             size_t header_end_pos = find_header_end();
             if (header_end_pos != std::string_view::npos) {
-                // 找到了 \r\n\r\n
-                if (header_end_pos > MAX_HEADER_SIZE) return false;
                 this->header_size = header_end_pos + 4;
-
-                // 偷窥 Content-Length
-                this->content_length = peek_content_length();
                 break;
             }
-            // 防御长 Header 攻击：即使没读完，超过 8KB 也要熔断
             if (raw_data_.size() > MAX_HEADER_SIZE) return false;
             if (runtime::web_read(client_fd, this->raw_data_) <= 0) return false;
         }
 
-        // ---  预留内存与 Body 大小防御 ---
-        if (this->content_length > 0) {
-            // ：防御超大 Body
-            if (this->content_length > MAX_BODY_SIZE) {
-                return false;
-            }
-
-            //  预分配raw_data_
-            this->raw_data_.reserve(this->header_size + this->content_length);
-        }
-
         if (!do_parse_header(this->header_size)) return false;
 
-        //  读 Body ---
-        if (this->content_length > 0) {
-            while (raw_data_.size() < this->header_size + this->content_length) {
-                if (runtime::web_read(client_fd, this->raw_data_) <= 0) return false;
+        this->content_length = peek_content_length();
+        std::string_view ct = get_header("Content-Type");
+
+        //文件的处理
+        if (ct.find("multipart/form-data") != std::string_view::npos) {
+            return handle_multipart_streaming(client_fd);
+        } else {
+            // 表单，json的处理
+            if (this->content_length > 0) {
+                if (this->content_length > MAX_NORMAL_BODY_SIZE) return false;
+
+                // 只有普通请求才预分配内存
+                this->raw_data_.reserve(this->header_size + this->content_length);
+
+                // 继续原有的 while 循环读完 Body...
+                while (raw_data_.size() < this->header_size + this->content_length) {
+                    if (runtime::web_read(client_fd, this->raw_data_) <= 0) return false;
+                }
+                this->body = std::string_view(raw_data_.data() + this->header_size, this->content_length);
+                parse_body();
             }
-            // 地址固定，直接绑定 Body
-            this->body = std::string_view(raw_data_.data() + this->header_size, this->content_length);
         }
-        parse_body();
         return true;
     }
 
+    bool Request::handle_multipart_streaming(int client_fd) {
+        std::string_view ct = get_header("Content-Type");
+        std::string boundary = extract_boundary(ct);
+        if (boundary.empty()) return false;
+
+        MultipartProcessor processor(boundary, "./uploads/", &gee::IOTaskPool::instance());
+
+        // 2. 处理初始残留数据
+        std::string_view initial_body(raw_data_.data() + header_size, raw_data_.size() - header_size);
+        if (!initial_body.empty()) {
+            processor.feed(initial_body);
+        }
+
+        size_t total_received = initial_body.size();
+        std::vector<char> stream_buffer;
+        stream_buffer.reserve(128 * 1024); // 适当加大缓冲区，减少 web_read 次数
+
+        while (total_received < content_length) {
+            // A. 协程在 web_read 这里会 yield，让出 CPU
+            ssize_t n = runtime::web_read(client_fd, stream_buffer);
+            if (n <= 0) break;
+
+            // B. feed 内部不再执行 current_file_.write()
+            // 而是执行 io_pool.addTask(...)
+            if (!processor.feed(std::string_view(stream_buffer.data(), stream_buffer.size()))) {
+                return false;
+            }
+
+            total_received += stream_buffer.size();
+            stream_buffer.clear();
+
+
+        }
+
+        // 告知处理器：数据流结束了，可能需要执行最后的 fsync
+        processor.finish();
+
+        this->uploaded_files_ = processor.get_saved_filenames();
+        return true;
+    }
+
+
+    std::string Request::extract_boundary(std::string_view content_type) {
+        // 寻找 "boundary=" 关键字
+        std::string_view target = "boundary=";
+        auto pos = content_type.find(target);
+        if (pos == std::string_view::npos) {
+            return "";
+        }
+
+        // 提取 boundary= 之后的所有内容
+        std::string_view boundary = content_type.substr(pos + target.size());
+
+        // 防御处理：有些浏览器可能会用引号包裹，如 boundary="----abc"
+        if (!boundary.empty() && boundary.front() == '"') {
+            boundary.remove_prefix(1);
+            if (!boundary.empty() && boundary.back() == '"') {
+                boundary.remove_suffix(1);
+            }
+        }
+
+        return std::string(boundary);
+    }
+
+
+    std::string_view Request::get_header(const std::string &key) const {
+        auto it = headers.find(key);
+        if (it != headers.end()) {
+            return it->second;
+        }
+        return ""; // 或者返回 std::string_view()
+    }
 
     void Request::parse_body() {
         if (method != "POST" && method != "PUT" && method != "PATCH") return;
@@ -69,13 +140,6 @@ namespace gee {
         std::cout << content_type << std::endl;
         if (content_type.find("application/x-www-form-urlencoded") != std::string_view::npos) {
             parse_form_urlencoded();
-        }
-        //  处理 JSON (application/json)
-        else if (content_type.find("application/json") != std::string_view::npos) {
-        }
-        // 文件上传 (multipart/form-data)
-        else if (content_type.find("multipart/form-data") != std::string_view::npos) {
-            // TODO: 手工实现非拷贝的文件解析逻辑
         }
     }
 
