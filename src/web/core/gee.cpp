@@ -34,24 +34,36 @@ namespace gee {
             gee::WebContext ctx(client_fd);
             try {
                 if (ctx.req_.parse(client_fd)) {
+                    // 1. 匹配路由
                     auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
-                    ctx.handlers_.assign(middlewares_.begin(), middlewares_.end());
+
                     if (node) {
+                        // 2. 填充动态参数 (:id 等)
                         ctx.set_params(std::move(params));
+
+                        // 3. 构造 Key，从预编译好的执行链表中获取 Handler 链
                         std::string key = std::string(ctx.method()) + "-" + node->pattern;
-                        if (routes_.count(key)) {
-                            ctx.handlers_.push_back(routes_[key]);
+
+                        if (route_handlers_chain_.count(key)) {
+                            // 【核心改动】：直接赋值整个执行链 (包含该组的所有中间件 + 业务逻辑)
+                            ctx.handlers_ = route_handlers_chain_[key];
                         } else {
                             ctx.handlers_.push_back([](WebContext *c) {
                                 c->JSON(gee::StateCode::SERVER_ERROR, "Handler Missing", "{}");
                             });
                         }
                     } else {
+                        // 4. 404 处理：你可以让 404 也走全局中间件，或者直接返回
+                        // 如果你想让 404 也走全局中间件，可以先 assign(middlewares_) 再 push 404
                         ctx.handlers_.push_back([](WebContext *c) {
                             c->JSON(gee::StateCode::NOT_FOUND, "404 Not Found", "{}");
                         });
                     }
+
+                    // 5. 开启“洋葱模型”执行
                     ctx.Next();
+
+                    // 6. 兜底处理：如果执行链跑完还没发数据，补发 OK
                     if (!ctx.res_.is_sent) {
                         ctx.JSON(gee::StateCode::OK, "OK", "{}");
                     }

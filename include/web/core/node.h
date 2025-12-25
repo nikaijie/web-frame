@@ -69,7 +69,7 @@ struct Node {
     // 传入 params 引用，用于存储 :id -> "123" 的映射
     Node *search(const std::vector<std::string> &parts, int height,
                  std::unordered_map<std::string, std::string> &params) {
-        // 1. 递归终止：搜到末尾或遇到 *
+        //  递归终止：搜到末尾或遇到 *
         if (parts.size() == height || (this->part.size() > 0 && this->part[0] == '*')) {
             if (this->pattern.empty()) return nullptr;
             return this;

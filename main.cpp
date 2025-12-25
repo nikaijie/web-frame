@@ -15,6 +15,18 @@ void LoggerMiddleware(gee::WebContext *c) {
     spdlog::info("<-- [Middleware] Done: {}  {} us", c->path(), duration);
 }
 
+void AuthMiddleware(gee::WebContext *c) {
+    std::string token = c->Query("token");
+    if (token != "zhaixing") {
+        spdlog::info("[Auth] Token verified.");
+        c->Next();
+    } else {
+        spdlog::warn("[Auth] Unauthorized access to {}", c->path());
+        c->JSON(gee::StateCode::PARAM_ERROR, "Invalid Token", "{\"error\": \"Unauthenticated\"}");
+        c->Abort(); // 拦截后续业务
+    }
+}
+
 int main() {
     init_logging();
     runtime::Scheduler::get().start(8);
@@ -22,6 +34,9 @@ int main() {
     gee::Engine app;
 
     app.Use(LoggerMiddleware);
+
+    auto api_group = app.Group("/api");
+    api_group->Use(AuthMiddleware);
     app.GET("/ping", [](gee::WebContext *ctx) {
         auto results = db::table<Employee>("employees")
                 .where("salary", ">", "8344")
@@ -30,11 +45,11 @@ int main() {
         ctx->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::success), results);
     });
 
-    app.GET("/user/:name", [](gee::WebContext *ctx) {
+    api_group->GET("/user/:name", [](gee::WebContext *ctx) {
         auto name = ctx->Param("name");
         auto age = ctx->Param("age");
 
-        // 手动构造一个 JSON 对象字符串
+        //   手动构造一个 JSON 对象字符串
         std::string body;
         body.reserve(64);
         body.append("{\"name\":\"").append(name)
