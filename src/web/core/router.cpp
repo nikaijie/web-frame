@@ -4,26 +4,24 @@
 
 
 namespace gee {
-    void Engine::add_route(std::string method, std::string pattern, HandlerFunc handler) {
-        // 1. 解析路径为 parts (例如: "/user/:id" -> ["user", ":id"])
-        std::vector<std::string> parts = parse_pattern(pattern);
 
+    void Engine::add_route(std::string method, std::string path, HandlerFunc handler,
+                           std::vector<HandlerFunc> group_middlewares) {
+        std::vector<std::string> parts = parse_pattern(path);
 
-        std::string key = method + "-" + pattern;
-
-        // 3. 检查并初始化该方法的 Trie 树根节点
         if (roots_.find(method) == roots_.end()) {
-            roots_[method] = new Node(); // 这里的 Node 是之前定义的 Trie 节点
+            roots_[method] = new Node();
         }
+        roots_[method]->insert(path, parts, 0);
 
-        // 4. 将路径插入 Trie 树
-        // insert 会在树中创建相应的节点路径，并把 pattern 存入叶子节点
-        roots_[method]->insert(pattern, parts, 0);
+        std::vector<HandlerFunc> chain;
 
-        // 5. 存储 Handler 回调
-        routes_[key] = std::move(handler);
+        chain.insert(chain.end(), group_middlewares.begin(), group_middlewares.end());
+        chain.push_back(std::move(handler));
 
-        spdlog::info("Route registered: {} - {}", method, pattern);
+        std::string key = method + "-" + path;
+        route_handlers_chain_[key] = std::move(chain);
+        spdlog::info("Route registered: {} - {}", method, path);
     }
 
 
