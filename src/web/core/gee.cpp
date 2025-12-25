@@ -35,25 +35,31 @@ namespace gee {
             try {
                 if (ctx.req_.parse(client_fd)) {
                     auto [node, params] = get_route(std::string(ctx.method()), std::string(ctx.path()));
+                    ctx.handlers_.assign(middlewares_.begin(), middlewares_.end());
                     if (node) {
                         ctx.set_params(std::move(params));
                         std::string key = std::string(ctx.method()) + "-" + node->pattern;
                         if (routes_.count(key)) {
-                            routes_[key](&ctx);
-                            if (!ctx.res_.is_sent) {
-                                ctx.JSON(gee::StateCode::OK, "OK","{}");
-                            }
+                            ctx.handlers_.push_back(routes_[key]);
                         } else {
-                            ctx.JSON(gee::StateCode::SERVER_ERROR, "Handler Missing", "{}");
+                            ctx.handlers_.push_back([](WebContext *c) {
+                                c->JSON(gee::StateCode::SERVER_ERROR, "Handler Missing", "{}");
+                            });
                         }
                     } else {
-                        ctx.JSON(gee::StateCode::NOT_FOUND, "404 Not Found", "{}");
+                        ctx.handlers_.push_back([](WebContext *c) {
+                            c->JSON(gee::StateCode::NOT_FOUND, "404 Not Found", "{}");
+                        });
+                    }
+                    ctx.Next();
+                    if (!ctx.res_.is_sent) {
+                        ctx.JSON(gee::StateCode::OK, "OK", "{}");
                     }
                 } else {
                     ctx.JSON(gee::StateCode::PARAM_ERROR, "Invalid HTTP Request", "{}");
                 }
-            }catch (std::exception& e) {
-                spdlog::error(e.what());
+            } catch (std::exception &e) {
+                spdlog::error("Request Error: {}", e.what());
             }
             ::close(client_fd);
         });

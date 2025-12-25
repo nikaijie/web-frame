@@ -2,11 +2,26 @@
 #include"src/test/web.h"
 #include "src/util/logger.h"
 
+
+void LoggerMiddleware(gee::WebContext *c) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    spdlog::info("--> [Middleware] Start: {}  {}", c->method(), c->path());
+
+    c->Next();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    spdlog::info("<-- [Middleware] Done: {}  {} us", c->path(), duration);
+}
+
 int main() {
     init_logging();
     runtime::Scheduler::get().start(8);
     db::init("127.0.0.1", "root", "123456789", "test", 50);
     gee::Engine app;
+
+    app.Use(LoggerMiddleware);
     app.GET("/ping", [](gee::WebContext *ctx) {
         auto results = db::table<Employee>("employees")
                 .where("salary", ">", "8344")

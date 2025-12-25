@@ -7,15 +7,32 @@
 #include "../src/db/db.h"
 
 namespace gee {
+    class WebContext;
+    using HandlerFunc = std::function<void(WebContext *)>;
+
     struct WebContext : public runtime::IOContextBase {
         gee::Request req_;
         gee::Response res_;
 
+        std::vector<HandlerFunc> handlers_;
+        // 记录当前执行到了第几个 Handler，初始为 -1
+        int index_;
 
         WebContext(int f)
-            : runtime::IOContextBase(f, runtime::IOType::WEB) {
+            : runtime::IOContextBase(f, runtime::IOType::WEB), index_(-1) {
         }
 
+        void Next() {
+            index_++;
+            int s = static_cast<int>(handlers_.size());
+            for (; index_ < s; index_++) {
+                handlers_[index_](this);
+            }
+        }
+
+        void Abort() {
+            index_ = static_cast<int>(handlers_.size());
+        }
 
         void set_params(std::unordered_map<std::string, std::string> params);
 
@@ -70,6 +87,7 @@ namespace gee {
 
         //post表单
         std::string PostForm(const std::string &key);
+
         // 获取原始 Body (用于 JSON 等)
         std::string_view Body();
     };
