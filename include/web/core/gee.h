@@ -17,6 +17,7 @@ namespace gee {
             : prefix_(std::move(prefix)), engine_(engine) {
         }
 
+
         RouterGroup *Group(std::string suffix); // 实现在下面或 cpp 中
 
         void Use(HandlerFunc middleware) {
@@ -38,7 +39,7 @@ namespace gee {
     class Engine : public RouterGroup {
     public:
         Engine(); // 构造函数实现在下面
-        ~Engine() = default;
+        ~Engine();
 
         // 禁止拷贝
         Engine(const Engine &) = delete;
@@ -60,9 +61,12 @@ namespace gee {
         get_route(const std::string &method, const std::string &path);
 
     private:
+        friend class RouterGroup;
         std::unordered_map<std::string, Node *> roots_;
         // 存储 完整执行链：Key="GET-/user/:id"
         std::unordered_map<std::string, std::vector<HandlerFunc> > route_handlers_chain_;
+
+        std::vector<RouterGroup *> groups_;
 
         int create_listen_socket(int port);
     };
@@ -70,14 +74,23 @@ namespace gee {
     // --- 重点：在两个类都定义完后，再写相互调用的函数实现 ---
 
     inline Engine::Engine() : RouterGroup("", this) {
+        groups_.clear();
+    }
+
+    inline Engine::~Engine() {
+        for (auto g: groups_) {
+            delete g;
+        }
     }
 
     inline RouterGroup *RouterGroup::Group(std::string suffix) {
-        return new RouterGroup(prefix_ + suffix, engine_);
+        auto *child = new RouterGroup(prefix_ + suffix, engine_);
+        child->middlewares_ = this->middlewares_;
+        engine_->groups_.push_back(child);
+        return child;
     }
 
     inline void RouterGroup::GET(std::string path, HandlerFunc handler) {
-        // 此时 Engine 类已经定义完整，编译器知道 add_route 是什么了
         engine_->add_route("GET", prefix_ + path, std::move(handler), middlewares_);
     }
 

@@ -29,7 +29,6 @@ namespace gee {
         std::vector<std::string> parts;
         std::string current;
 
-        // 模拟 Go 的 strings.Split 行为
         for (char c: pattern) {
             if (c == '/') {
                 if (!current.empty()) {
@@ -65,8 +64,6 @@ namespace gee {
 
         Node *root = it->second;
 
-        // 3. 【关键修改】：调用搜索逻辑时，直接把 params 传进去
-        // Node 内部会根据优先级匹配，并自动填好 :id 或 * 通配符对应的参数
         Node *n = root->search(searchParts, 0, params);
 
         if (n != nullptr) {
