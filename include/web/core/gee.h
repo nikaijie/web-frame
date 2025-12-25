@@ -32,6 +32,10 @@ namespace gee {
             add_route("POST", path, std::move(handler));
         }
 
+        void Use(HandlerFunc middleware) {
+            middlewares_.push_back(std::move(middleware));
+        }
+
         // 核心：主线程将读取到的 fd 和原始数据交给框架
         void handle_http_task(int fd);
 
@@ -48,6 +52,8 @@ namespace gee {
         // 路由表：Key 格式为 "METHOD-PATH"
         std::unordered_map<std::string, HandlerFunc> routes_;
         std::unordered_map<std::string, Node *> roots_;
+
+        std::vector<HandlerFunc> middlewares_;
 
         int create_listen_socket(int port);
     };

@@ -4,8 +4,6 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 
 void init_logging() {
-    // 1. 预分配异步队列大小（必须是 2 的幂）
-    // 这不会阻塞你的协程 Worker 线程
     spdlog::init_thread_pool(8192, 1);
 
     auto stdout_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
