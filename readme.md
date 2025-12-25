@@ -9,5 +9,5 @@
 | **超时错误 (Timeout)** | 2181 | 572 | **0** | **极致可靠** |
 | **测试内存占用** | 2.5 GB | 100 MB | **100 MB** | **仅为 Java 的 4%** |
 
-![img.png](img/summary.png)
-![img_1.png](img/process.png)
+![./img/summary.png](img/summary.png)
+![./img/process.png](img/process.png)
