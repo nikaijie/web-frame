@@ -72,8 +72,19 @@ namespace gee {
     };
 
     // --- 重点：在两个类都定义完后，再写相互调用的函数实现 ---
+    inline HandlerFunc Recovery() {
+        // 返回一个 Lambda 闭包
+        return [](gee::WebContext *c) {
+            try {
+                c->Next();
+            } catch (...) {
+                c->JSON(gee::StateCode::SERVER_ERROR, "Internal Server Error", "{}");
+            }
+        };
+    }
 
     inline Engine::Engine() : RouterGroup("", this) {
+        this->Use(Recovery());
         groups_.clear();
     }
 
