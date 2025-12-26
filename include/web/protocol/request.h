@@ -23,15 +23,6 @@ namespace gee {
         // 存放 JSON 对象 (建议集成 nlohmann/json，或者先存为原始 string)
         std::string json_body_;
 
-        // 存放文件上传数据
-        struct FormFile {
-            std::string filename;
-            std::string content_type;
-            std::string data; // 或者是文件的起始指针
-        };
-
-        std::unordered_map<std::string, FormFile> files_;
-
         bool parse(int client_fd);
 
         size_t peek_content_length();

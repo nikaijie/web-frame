@@ -24,14 +24,12 @@ namespace runtime {
         // 通用监听：支持 Read 或 Write
         void watch(int fd, IOEvent event, Goroutine::Ptr g);
 
-        // 原有的业务接口可以保留作为快捷方式
-        void watch_read(int fd, Goroutine::Ptr g);
 
         void poll_loop();
 
         void watch_read_web(int fd, Goroutine::Ptr g);
 
-        void watch_write_web(int fd, Goroutine::Ptr g);
+
 
 
     private:

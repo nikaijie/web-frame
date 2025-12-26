@@ -59,20 +59,7 @@ namespace runtime {
         kevent(kq_fd_, &ev, 1, nullptr, 0, nullptr);
     }
 
-    void Netpoller::watch_write_web(int fd, Goroutine::Ptr g) {
-        {
-            std::lock_guard<std::mutex> lock(mtx_);
-            if (contexts_.find(fd) == contexts_.end()) {
-                contexts_[fd] = std::make_unique<gee::WebContext>(fd);
-            }
-            contexts_[fd]->type = IOType::WEB;
-            contexts_[fd]->waiting_g = std::move(g);
-        }
 
-        struct kevent ev;
-        EV_SET(&ev, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, contexts_[fd].get());
-        kevent(kq_fd_, &ev, 1, nullptr, 0, nullptr);
-    }
 
     //数据库io时向
     void Netpoller::watch(int fd, IOEvent event, Goroutine::Ptr g) {
@@ -100,7 +87,4 @@ namespace runtime {
         }
     }
 
-    void Netpoller::watch_read(int fd, Goroutine::Ptr g) {
-        watch(fd, IOEvent::Read, std::move(g));
-    }
 }
