@@ -47,6 +47,9 @@ namespace gee {
         std::string_view get_header(const std::string &key) const;
 
 
+        ssize_t web_read(int fd, std::vector<char>& buffer);
+
+
         const std::vector<std::string> &get_uploaded_files() const {
             return uploaded_files_;
         }

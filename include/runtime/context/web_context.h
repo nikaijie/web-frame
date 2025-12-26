@@ -90,5 +90,7 @@ namespace gee {
 
         // 获取原始 Body (用于 JSON 等)
         std::string_view Body();
+
+        ssize_t web_write(int fd, const char* data, size_t len);
     };
 }

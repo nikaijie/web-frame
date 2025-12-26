@@ -31,8 +31,6 @@ add_executable(webFrame ${SOURCES}
         src/test/mysql.h
         src/web/core/gee.cpp
         include/web/core/gee.h
-        include/runtime/web_io.h
-        src/runtime/web_io.cpp
         include/runtime/context/iocontext.h
         include/runtime/context/db_context.h
         include/runtime/context/web_context.h

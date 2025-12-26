@@ -1,13 +1,10 @@
 #pragma once
-
 #include "web/protocol/request.h"
-
 #include <charconv>
 #include <iostream>
-
-#include "runtime/web_io.h"
 #include "web/protocol/MultipartProcessor.h"
 #include "../../../include/pool/io_task_pool.h"
+#include "runtime/netpoller.h"
 
 namespace gee {
     bool Request::parse(int client_fd) {
@@ -23,7 +20,7 @@ namespace gee {
                 break;
             }
             if (raw_data_.size() > MAX_HEADER_SIZE) return false;
-            if (runtime::web_read(client_fd, this->raw_data_) <= 0) return false;
+            if (web_read(client_fd, this->raw_data_) <= 0) return false;
         }
 
         if (!do_parse_header(this->header_size)) return false;
@@ -44,7 +41,7 @@ namespace gee {
 
                 // 继续原有的 while 循环读完 Body...
                 while (raw_data_.size() < this->header_size + this->content_length) {
-                    if (runtime::web_read(client_fd, this->raw_data_) <= 0) return false;
+                    if (web_read(client_fd, this->raw_data_) <= 0) return false;
                 }
                 this->body = std::string_view(raw_data_.data() + this->header_size, this->content_length);
                 parse_body();
@@ -72,7 +69,7 @@ namespace gee {
 
         while (total_received < content_length) {
             // A. 协程在 web_read 这里会 yield，让出 CPU
-            ssize_t n = runtime::web_read(client_fd, stream_buffer);
+            ssize_t n = web_read(client_fd, stream_buffer);
             if (n <= 0) break;
 
             // B. feed 内部不再执行 current_file_.write()
@@ -83,8 +80,6 @@ namespace gee {
 
             total_received += stream_buffer.size();
             stream_buffer.clear();
-
-
         }
 
         // 告知处理器：数据流结束了，可能需要执行最后的 fsync
@@ -323,5 +318,23 @@ namespace gee {
         }
 
         return true;
+    }
+
+    ssize_t Request::web_read(int fd, std::vector<char> &buffer) {
+        char temp[4096];
+        ssize_t n = ::read(fd, temp, sizeof(temp));
+        if (n > 0) {
+            buffer.insert(buffer.end(), temp, temp + n);
+            return n;
+        } else if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // 关键点：数据还没到，挂起协程
+            auto g = runtime::Goroutine::current();
+            runtime::Netpoller::get().watch_read_web(fd, g);
+            runtime::Goroutine::yield();
+
+            // 被唤醒后，递归调一次自己，去读新到的数据
+            return web_read(fd, buffer);
+        }
+        return n; // 0 或 -1 (错误)
     }
 }

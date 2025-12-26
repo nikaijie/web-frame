@@ -1,12 +1,11 @@
 #include "runtime/context/web_context.h"
-
 #include <charconv>
-
-#include "runtime/web_io.h"
 #include "../src/db/db.h"
 
 
 #include <string_view>
+
+#include "runtime/netpoller.h"
 
 namespace gee {
     void WebContext::set_params(std::unordered_map<std::string, std::string> params) {
@@ -30,7 +29,7 @@ namespace gee {
 
         // 1. 让 Response 构造完整的 HTTP 报文流
         std::string http_packet = res_.build_http_packet(http_code, text);
-        runtime::web_write(this->fd, http_packet.data(), http_packet.size());
+        web_write(this->fd, http_packet.data(), http_packet.size());
         res_.is_sent = true;
     }
 
@@ -85,5 +84,33 @@ namespace gee {
     // 获取原始 Body (用于 JSON 等)
     std::string_view WebContext::Body() {
         return req_.body;
+    }
+
+    ssize_t WebContext::web_write(int fd, const char* data, size_t len) {
+        size_t total_sent = 0;
+
+        while (total_sent < len) {
+            ssize_t n = ::write(fd, data + total_sent, len - total_sent);
+            if (n > 0) {
+                total_sent += n;
+                // 继续循环，尝试写剩下的部分
+            } else if (n == -1) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // 内核发送缓冲区满了，注册可写事件并挂起
+                    auto g = runtime::Goroutine::current();
+                    // 注意这里使用的是 IOEvent::Write
+                    runtime::Netpoller::get().watch(fd, runtime::IOEvent::Write, g);
+
+                    runtime::Goroutine::yield();
+                    // 被唤醒后，说明现在可以继续写了，回到 while 循环
+                    continue;
+                }
+                if (errno == EINTR) continue;
+                return -1; // 真正的 Socket 错误
+            } else {
+                return 0; // 对端关闭
+            }
+        }
+        return total_sent;
     }
 }

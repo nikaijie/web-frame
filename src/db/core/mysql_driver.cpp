@@ -36,8 +36,6 @@ namespace db {
     void MySQLDriver::wait_io(int status) {
         int fd = mysql_get_socket(mysql_);
         auto current_g = runtime::Goroutine::current();
-
-        // 只有在协程中调用才需要挂起
         if (current_g) {
             if (status & MYSQL_WAIT_READ) {
                 runtime::Netpoller::get().watch(fd, runtime::IOEvent::Read, current_g);
