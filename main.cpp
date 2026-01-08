@@ -37,7 +37,7 @@ int main() {
 
     auto api_group = app.Group("/api");
     api_group->Use(AuthMiddleware);
-    app.GET("/ping", [](gee::WebContext *ctx) {
+    app.GET("/getUser", [](gee::WebContext *ctx) {
         auto results = db::table<Employee>("employees")
                 .where("salary", ">", "8344")
                 .model();

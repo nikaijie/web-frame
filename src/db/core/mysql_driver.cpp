@@ -20,6 +20,7 @@ namespace db {
         mysql_ = mysql_init(nullptr);
         if (!mysql_) return false;
 
+
         // 1. 先进行标准的阻塞连接
         auto ret = mysql_real_connect(mysql_, host.c_str(), user.c_str(),
                                       pass.c_str(), dbname.c_str(), 3306, nullptr, 0);
@@ -49,7 +50,7 @@ namespace db {
     QueryResult MySQLDriver::execute_query(const std::string &sql) {
         int status, err;
 
-        // 所有的 query 操作依然使用异步版本，这样能保证多协程并发时不阻塞 Worker 线程
+
         status = mysql_real_query_start(&err, mysql_, sql.c_str(), sql.length());
         while (status != 0) {
             wait_io(status);
@@ -85,11 +86,8 @@ namespace db {
 
         MYSQL_ROW row;
         while ((row = mysql_fetch_row(res))) {
-            // 关键：只存指针，不存数据。 row 是由 mysql 库管理的内存
             results.push_back(row);
         }
-        // 注意：这里不能执行 mysql_free_result，因为 results 里的指针指向它
-        // 我们需要把 free 延迟到 model 映射完之后
         return results;
     }
 } // namespace db

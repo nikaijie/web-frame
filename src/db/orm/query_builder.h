@@ -33,22 +33,17 @@ namespace db {
         std::vector<T> model() {
             std::string sql = build_select_sql();
 
-            // 1. 获取数据库连接驱动
             MySQLDriver *drv = get_driver_safely();
 
-            // 2. 执行查询
             auto result = drv->execute_query(sql);
 
-            // 3. 归还连接
             MySQLPool::get().release(drv);
-
-            // 4. 将原始结果映射为对象
             std::vector<T> results;
             results.reserve(result.rows.size());
 
             for (auto &row : result.rows) {
                 T obj;
-                obj.from_row(row); // 此时 result.res 还没析构，指针绝对安全
+                obj.from_row(row);
                 results.push_back(std::move(obj));
             }
             return results;
