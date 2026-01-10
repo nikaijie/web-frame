@@ -8,6 +8,7 @@ namespace gee {
         PARAM_ERROR = 400,
         AUTH_FAILED = 401,
         NOT_FOUND = 404,
+        TIMEOUT = 408,
         SERVER_ERROR = 500
     };
 

@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "data_structure/channel.h"
+#include "data_structure/context.h"
 #include "data_structure/wait_group.h"
 #include"src/test/web.h"
 #include "src/util/logger.h"
@@ -30,6 +31,44 @@ void AuthMiddleware(gee::WebContext *c) {
     }
 }
 
+auto TimeoutMiddleware(int timeout_ms) {
+    return [timeout_ms](gee::WebContext *c) {
+
+        auto ctx = runtime::Context::WithTimeout(timeout_ms);
+        auto biz_done = std::make_shared<runtime::Channel<bool>>(1);
+
+        //业务代码
+        runtime::go([c, biz_done]() {
+            c->Next();
+            biz_done->push(true);
+        });
+
+
+        auto wait_winner = std::make_shared<runtime::Channel<int>>(1);
+
+        runtime::go([biz_done, wait_winner]() {
+            biz_done->pop();
+            wait_winner->push(1); // 業務勝出
+        });
+
+        runtime::go([ctx, wait_winner]() {
+            ctx->done()->pop();   // 這裡會被 Context 內部的 Timer 喚醒
+            wait_winner->push(2); // 超時勝出
+        });
+
+        // 阻塞等待賽跑結果
+        int winner = wait_winner->pop();
+
+        if (winner == 2) {
+            if (!c->is_aborted()) { // 防止重複寫入
+                c->JSON(gee::StateCode::TIMEOUT, "Request Timeout",
+                        "{}");
+                c->Abort(); // 標記 Abort，阻止後續邏輯影響響應
+            }
+        }
+    };
+}
+
 int main() {
     init_logging();
     runtime::Scheduler::get().start(8);
@@ -37,6 +76,7 @@ int main() {
     gee::Engine app;
 
     app.Use(LoggerMiddleware);
+    app.Use(TimeoutMiddleware(3000));
 
     auto api_group = app.Group("/api");
     api_group->Use(AuthMiddleware);

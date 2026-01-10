@@ -49,6 +49,8 @@ add_executable(webFrame ${SOURCES}
         include/data_structure/channel.h
         include/data_structure/wait_group.h
         src/data_structure/wait_group.cpp
+        include/data_structure/context.h
+        src/data_structure/context.cpp
 )
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)

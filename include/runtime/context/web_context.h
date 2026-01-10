@@ -34,6 +34,10 @@ namespace gee {
             index_ = static_cast<int>(handlers_.size());
         }
 
+        bool is_aborted() const {
+            return index_ >= static_cast<int>(handlers_.size());
+        }
+
         void set_params(std::unordered_map<std::string, std::string> params);
 
         // 业务层调用：ctx->Param("userId")
