@@ -64,13 +64,7 @@ void Scheduler::worker_loop() {
         }
 
         if (g) {
-            // 物理线程切换到协程栈执行业务代码
             g->resume();
-
-            // resume 返回后有两种情况：
-            // 1. 协程运行完了 (is_finished == true)
-            // 2. 协程通过 yield 主动挂起了 (比如在等 IO)
-
             if (g->is_finished()) {
                 // 协程已结束，shared_ptr 会自动释放相关内存
             } else {

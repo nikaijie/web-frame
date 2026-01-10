@@ -43,7 +43,13 @@ add_executable(webFrame ${SOURCES}
         src/model/Employee.cpp
         src/web/protocol/request.cpp
         include/web/protocol/MultipartProcessor.h
-        include/pool/io_task_pool.h)
+        include/pool/io_task_pool.h
+        include/data_structure/co_mutex.h
+        src/data_structure/co_mutex.cpp
+        include/data_structure/channel.h
+        include/data_structure/wait_group.h
+        src/data_structure/wait_group.cpp
+)
 
 # 4. 指定包含路径 (MariaDB 的头文件结构略有不同)
 target_include_directories(webFrame PRIVATE

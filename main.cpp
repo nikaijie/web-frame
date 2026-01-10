@@ -1,4 +1,7 @@
 #include <iostream>
+
+#include "data_structure/channel.h"
+#include "data_structure/wait_group.h"
 #include"src/test/web.h"
 #include "src/util/logger.h"
 
@@ -76,6 +79,41 @@ int main() {
         } else {
             c->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::failed), "{}");
         }
+    });
+
+    app.GET("/user/print_test", [](gee::WebContext *ctx) {
+        auto wg = std::make_shared<runtime::WaitGroup>();
+        auto chan1 = std::make_shared<runtime::Channel<int> >(0);
+        auto chan2 = std::make_shared<runtime::Channel<int> >(0);
+        printf("[Main] Start\n");
+        wg->add(2);
+        runtime::go([chan1, chan2,wg]() {
+            for (int i = 1; i <= 10; i += 2) {
+                // 第一次直接跑，后续等 chan1 的信号
+                if (i > 1) chan1->pop();
+                printf("Coroutine A: %d\n", i);
+                chan2->push(1);
+            }
+            wg->done(); // 完成
+        });
+        runtime::go([chan1, chan2,wg]() {
+            for (int i = 2; i <= 10; i += 2) {
+                // 等待协程 A 的信号
+                chan2->pop();
+
+                printf("Coroutine B: %d\n", i);
+
+                // 打印完通知协程 A
+                chan1->push(1);
+            }
+            wg->done();
+        });
+        printf("[Main] Waiting...\n");
+        wg->wait();
+        printf("[Main] Woke up!\n");
+        ctx->JSON(gee::StateCode::OK, gee::statusToString(gee::Message::success),
+                  "{}");
+        printf("[Main] After JSON\n");
     });
     app.Run(8080);
     return 0;
