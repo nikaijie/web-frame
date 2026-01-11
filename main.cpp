@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "data_structure/channel.h"
+#include "data_structure/context.h"
 #include "data_structure/wait_group.h"
 #include"src/test/web.h"
 #include "src/util/logger.h"
@@ -30,6 +31,29 @@ void AuthMiddleware(gee::WebContext *c) {
     }
 }
 
+auto TimeoutMiddleware(int timeout_ms) {
+    return [timeout_ms](gee::WebContext *c) {
+        auto winner_ch = std::make_shared<runtime::Channel<int>>(1);
+
+        runtime::go([c, winner_ch]() {
+            c->Next();
+            winner_ch->push(1); // 业务跑完发 1
+        });
+
+
+        runtime::Scheduler::get().add_timer(timeout_ms, nullptr, [winner_ch]() {
+            winner_ch->push(2); // 时间到发 2
+        });
+
+        int result = winner_ch->pop();
+
+        if (result == 2 && !c->is_aborted()) {
+            c->JSON(gee::StateCode::TIMEOUT, "Timeout", "{}");
+            c->Abort();
+        }
+    };
+}
+
 int main() {
     init_logging();
     runtime::Scheduler::get().start(8);
@@ -37,6 +61,7 @@ int main() {
     gee::Engine app;
 
     app.Use(LoggerMiddleware);
+    app.Use(TimeoutMiddleware(3000));
 
     auto api_group = app.Group("/api");
     api_group->Use(AuthMiddleware);
